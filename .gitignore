@@ -1,2 +1,6 @@
+__pycache__
+.venv/*
+
 calibre-bin/*
+library/*
 *.ini
