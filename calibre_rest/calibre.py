@@ -8,7 +8,7 @@ import sys
 from os import path
 from typing import Any
 
-from models import Book
+from calibre_rest.models import Book
 
 
 class CalibreWrapper:
@@ -307,20 +307,3 @@ def quote(s: str) -> str:
 def error(message, exit_code=1):
     logging.error(message)
     sys.exit(exit_code)
-
-
-if __name__ == "__main__":
-    from config import Config
-
-    config = Config("config.ini")
-    logging.basicConfig(level=str.upper(config.log_level))
-    c = CalibreWrapper(config.cdb, config.library)
-    # print(c.remove([180]))
-    # print(
-    #     c.add_empty(
-    #         title="Foo Bar123",
-    #         authors="John Doe & Peter Drome",
-    #         tags="test, foo, bar, new tag",
-    #         identifier="isbn:1234, asin:abcd",
-    #     )
-    # )

@@ -1,6 +1,6 @@
 from flask import Flask
 
-from calibre import CalibreWrapper
+from calibre_rest.calibre import CalibreWrapper
 from config import config_map
 
 
@@ -16,7 +16,7 @@ def create_app(config_name="default"):
     )
 
     with app.app_context():
-        import routes
+        import calibre_rest.routes
 
     return app
 

@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from flask import Flask, jsonify
 
-from app import create_app
+from calibre_rest import create_app
 
 
 # https://gist.github.com/eruvanos/f6f62edb368a20aaa880e12976620db8

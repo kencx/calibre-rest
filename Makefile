@@ -42,7 +42,7 @@ clean: check
 	- rm *.txt
 
 run:
-	flask --app 'app:create_app("dev")' run --debug
+	flask --app 'calibre_rest:create_app("dev")' run --debug
 
 test:
 	pytest -v
