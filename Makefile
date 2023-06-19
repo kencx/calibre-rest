@@ -1,4 +1,4 @@
-.PHONY: help all base dev upgrade check clean
+.PHONY: help all base dev upgrade check clean run test
 
 help:
 	@echo 'Usage:'
@@ -40,3 +40,9 @@ check:
 ## clean: clean all *.txt files
 clean: check
 	- rm *.txt
+
+run:
+	flask --app 'app:create_app("dev")' run --debug
+
+test:
+	pytest -v

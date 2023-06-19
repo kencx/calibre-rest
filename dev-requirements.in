@@ -1,3 +1,5 @@
 -c requirements.txt
-black
 pip-tools
+isort
+black
+pytest

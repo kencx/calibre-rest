@@ -1,5 +1,10 @@
+*.pyc
 __pycache__
 .venv/*
+
+instance/*
+.pytest_cache/*
+.coverage
 
 calibre-bin/*
 library/*
