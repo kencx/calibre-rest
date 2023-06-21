@@ -85,7 +85,7 @@ class Book:
         # TODO handle redundant data fields
         return sorted(self.v.iter_errors(instance), key=str)
 
-    def serialize(self):
+    def todict(self):
         return asdict(self)
 
 
@@ -134,7 +134,7 @@ class PaginatedResults:
     def has_next_page(self):
         return not (self.limit + self.after_id > self.total_count)
 
-    def serialize(self):
+    def todict(self):
         return {
             "books": self.books,
             "metadata": {

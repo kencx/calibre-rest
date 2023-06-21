@@ -145,7 +145,10 @@ class CalibreWrapper:
 
         # object_hook arg cannot be used as it results in a nested instance
         # in the identifiers dict field
-        b = json.loads(out)
+        try:
+            b = json.loads(out)
+        except json.JSONDecodeError as exc:
+            self.logger.error(f"Error decoding JSON: {exc}")
 
         # "calibredb list" returns a list, regardless of the limit or number of
         # results.

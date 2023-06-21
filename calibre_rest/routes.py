@@ -189,7 +189,7 @@ def extract_input_data(request: Request) -> dict:
                 500,
                 jsonify(errors=[{e.path.popleft(): e.message} for e in errors]),
             )
-        book = Book(**json_data).serialize()
+        book = Book(**json_data).todict()
     return book
 
 
