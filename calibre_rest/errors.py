@@ -12,17 +12,5 @@ class CalibreRuntimeError(Exception):
         super().__init__(message)
 
 
-class ValidationError(ValueError):
-    """Raise when args fail validation"""
-
-    code = 422
-
-    def __init__(self, message, code=None):
-        super().__init__(message)
-
-        if code is not None:
-            self.code = code
-
-
 class NoItemsError(Exception):
     pass

@@ -2,13 +2,12 @@ import json
 import tempfile
 from os import path
 
-from flask import abort
+from flask import Request, abort
 from flask import current_app as app
 from flask import jsonify, make_response, request
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
-from calibre_rest.errors import ValidationError
 from calibre_rest.models import Book
 
 calibredb = app.config["CALIBREDB"]
@@ -31,6 +30,17 @@ def get_book(id):
 # TODO list with sort, filter search, pagination
 @app.route("/books")
 def get_books():
+    """
+    Get list of books.
+
+    Query Parameters:
+    limit: Maximum number of results in a page
+    before_id: Results before id
+    after_id: Results after id
+    sort: Sort results by field
+    search: Search results
+    """
+
     per_page = request.args.get("per_page")
 
     if per_page:
@@ -54,12 +64,18 @@ def add_book():
         data: Optional JSON data
     """
 
+    if (
+        request.content_type != "multipart/form-data"
+        or request.content_type != "application/json"
+    ):
+        abort(415, "Only multipart/form-data and/or application/json allowed")
+
     if "file" not in request.files:
-        abort(400, "No files")
+        abort(400, "No file provided")
 
     file = request.files["file"]
     if file and file.filename == "":
-        abort(400, "No file provided")
+        abort(400, "Invalid filename")
 
     if not allowed_file(file.filename):
         abort(400, "File extension not allowed")
@@ -72,16 +88,7 @@ def add_book():
     if not path.isfile(tempfilepath):
         abort(500)
 
-    # extract optional json data
-    data = request.form.get("data")
-    book = {}
-
-    if data is not None:
-        json_data = json.loads(data)
-
-        # TODO Validate schema and init Book object
-        book = Book(**json_data).serialize()
-
+    book = extract_input_data(request)
     id = calibredb.add(tempfilepath, **book)
     return response(201, jsonify(added_id=id))
 
@@ -92,9 +99,12 @@ def add_empty_book():
     headers:
         Content-Type: application/json
     """
-    # validate input
 
-    id = calibredb.add_empty()
+    if request.content_type != "application/json":
+        abort(415, "Only application/json allowed")
+
+    book = extract_input_data(request)
+    id = calibredb.add_empty(**book)
     return response(201, jsonify(id=id))
 
 
@@ -104,10 +114,13 @@ def update_book(id):
     headers:
         Content-Type: application/json
     """
-    # validate input
 
-    data = request.get_json() or {}
-    calibredb.set_metadata(id, None, data)
+    if request.content_type != "application/json":
+        abort(415, "Only application/json allowed")
+
+    book = extract_input_data(request)
+    id = calibredb.set_metadata(id, None, book)
+    return response(200, jsonify(id=id))
 
 
 @app.route("/books/<int:id>", methods=["DELETE"])
@@ -140,19 +153,19 @@ def handle_http_error(e):
     return jsonify(error=str(e)), e.code
 
 
-# TODO Input data validation:
-#  - multiple validation errors
-#  - missing required data
-#  - redundant data fields
-#  - JSON parse error
-@app.errorhandler(ValidationError)
-def handle_validation_error(e):
-    return jsonify(error=str(e)), e.code
+@app.errorhandler(json.JSONDecodeError)
+def handle_json_decode_error(e):
+    return jsonify(error=f"Error decoding JSON: {str(e)}"), 500
 
 
 @app.errorhandler(TimeoutError)
 def handle_timeout_error(e):
     return jsonify(error=str(e)), 500
+
+
+@app.errorhandler(ValueError)
+def handle_value_error(e):
+    return jsonify(error=str(e)), 422
 
 
 def response(status_code, data, headers={"Content-Type": "application/json"}):
@@ -162,6 +175,22 @@ def response(status_code, data, headers={"Content-Type": "application/json"}):
         response.headers[k] = v
 
     return response
+
+
+def extract_input_data(request: Request) -> dict:
+    data = request.form.get("data")
+    book = {}
+
+    if data is not None:
+        json_data = json.loads(data)
+        errors = Book.validate(json_data)
+        if len(errors):
+            return response(
+                500,
+                jsonify(errors=[{e.path.popleft(): e.message} for e in errors]),
+            )
+        book = Book(**json_data).serialize()
+    return book
 
 
 def allowed_file(filename: str) -> bool:

@@ -7,7 +7,7 @@ import subprocess
 from os import path
 from typing import Any
 
-from calibre_rest.errors import CalibreRuntimeError, ValidationError
+from calibre_rest.errors import CalibreRuntimeError
 from calibre_rest.models import Book
 
 
@@ -163,7 +163,7 @@ class CalibreWrapper:
         list[Book]: List of books
         """
         if limit <= 0:
-            raise ValidationError(f"limit {limit} not allowed")
+            raise ValueError(f"limit {limit} not allowed")
 
         cmd = (
             f"{self.cdb_with_lib} list "
@@ -179,7 +179,6 @@ class CalibreWrapper:
                 res.append(Book(**b))
         return res
 
-    # TODO check book_path exists and is valid file
     def add(self, book_path: str, **kwargs: Any) -> list[int]:
         """Add a single book to calibre database.
 
@@ -270,7 +269,7 @@ class CalibreWrapper:
         """
 
         if not all(i >= 0 for i in ids):
-            raise ValidationError(f"ids {ids} not allowed")
+            raise ValueError(f"ids {ids} not allowed")
 
         cmd = f'{self.cdb_with_lib} remove {",".join(map(str, ids))}'
         if permanent:
@@ -376,6 +375,7 @@ class CalibreWrapper:
                     else:
                         cmd += f" --field {field}:{quote(str(value))}"
 
+        # TODO return id of updated book
         return self._run(cmd)
 
     def export(self, ids: list[int]) -> str:
@@ -393,4 +393,4 @@ def quote(s: str) -> str:
 
 def validate_id(id: int) -> None:
     if id <= 0:
-        raise ValidationError(f"{id} cannot be <= 0")
+        raise ValueError(f"Value {id} cannot be <= 0")
