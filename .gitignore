@@ -5,6 +5,7 @@ __pycache__
 instance/*
 .pytest_cache/*
 .coverage
+testdata/*
 
 calibre-bin/*
 library/*

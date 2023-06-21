@@ -4,10 +4,10 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 from os import path
 from typing import Any
 
+from calibre_rest.errors import CalibreRuntimeError, ValidationError
 from calibre_rest.models import Book
 
 
@@ -42,17 +42,30 @@ class CalibreWrapper:
         "title",
     ]
 
-    def __init__(self, calibredb: str, lib: str):
+    def __init__(self, calibredb: str, lib: str, logger=None) -> None:
+        """Initialize the calibredb command-line wrapper.
+
+        Args:
+        calibredb (str): Path to calibredb executable.
+        lib (str): Path to calibre library on the filesystem.
+        logger (logging.Logger): Custom logger object
+
+        Raises:
+        FileNotFoundError: If the calibredb executable is not valid
+        FileNotFoundError: If the calibre metadata.db is not found in the given
+            library path
+        """
+
+        if logger is None:
+            logger = logging.getLogger(__name__)
+        self.logger = logger
+
         executable = path.abspath(calibredb)
-
         if not shutil.which(executable):
-            error(f"{executable} is not a valid executable")
-
-        if not path.isdir(lib) and not path.exists(lib):
-            error(f"{lib} is not a valid directory")
+            raise FileNotFoundError(f"{executable} is not a valid executable")
 
         if not path.exists(path.join(lib, "metadata.db")):
-            error(
+            raise FileNotFoundError(
                 f"Failed to find Calibre database file {path.join(lib, 'metadata.db')}"
             )
 
@@ -60,9 +73,25 @@ class CalibreWrapper:
         self.lib = lib
         self.cdb_with_lib = f"{executable} --with-library {lib}"
 
-    @staticmethod
-    def _run(cmd: str) -> (str, str):
-        logging.debug(f'Running "{cmd}"')
+    def _run(self, cmd: str) -> str:
+        """Execute calibredb on the command line.
+
+        Any stderr that is returned with a zero exit code will be logged as
+        warnings.
+
+        Args:
+        cmd (str): Full command string to execute. This string will be split
+            appropriately with shlex.split.
+
+        Returns:
+        str: Output of command
+
+        Raises:
+        FileNotFoundError: If the command's executable is invalid.
+        CalibreRuntimeError: If the command returns a non-zero exit code.
+        """
+
+        self.logger.debug(f'Running "{cmd}"')
         try:
             process = subprocess.run(
                 shlex.split(cmd),
@@ -74,60 +103,89 @@ class CalibreWrapper:
                 timeout=None,
             )
         except FileNotFoundError as err:
-            error(f"Executable could not be found\n{err}")
-        except subprocess.CalledProcessError as err:
-            error(f"Returned exit code {err.returncode}\n{err}")
-        except TimeoutError as err:
-            error(f"Process timed out\n{err}")
+            raise FileNotFoundError(f"Executable could not be found.\n\n{err}") from err
+        except subprocess.CalledProcessError as e:
+            raise CalibreRuntimeError(e.cmd, e.returncode, e.stdout, e.stderr)
 
-        return process.stdout, process.stderr
+        if process.stderr:
+            self.logger.warning(process.stderr)
 
-    def version(self):
+        return process.stdout
+
+    def version(self) -> str:
+        """Get calibredb version."""
+
         cmd = f"{self.cdb} --version"
-        return self._run(cmd)
+        out = self._run(cmd)
 
-    # Get book with given id
-    def get_book(self, id: int):
-        if id <= 0:
-            error(f"id {id} not allowed")
+        match = re.search(re.compile(r"calibre ([\d.]+)"), out)
+        if match is not None:
+            return match.group(1)
+        else:
+            self.logger.error("failed to parse calibredb version")
+
+    def get_book(self, id: int) -> Book:
+        """Get book from calibre database.
+
+        Args:
+        id (int): Book ID
+
+        Returns:
+        Book: Book object
+        """
+
+        validate_id(id)
 
         cmd = (
             f"{self.cdb_with_lib} list "
             f"--for-machine --fields=all "
             f"--search=id:{id} --limit=1"
         )
+        out = self._run(cmd)
 
-        out, err = self._run(cmd)
+        # object_hook arg cannot be used as it results in a nested instance
+        # in the identifiers dict field
+        b = json.loads(out)
 
-        if err:
-            error(err)
+        # "calibredb list" returns a list, regardless of the limit or number of
+        # results.
+        if len(b) == 1:
+            return Book(**b[0])
 
-        if out:
-            # object_hook cannot be used as it will result in a nested instance
-            # in the identifiers dict field
-            json_book = json.loads(out)
-            if len(json_book) == 1:
-                return Book(**json_book[0])
-
-    # List all books
     # TODO sort and filter
-    def get_books(self, limit: int):
+    def get_books(self, limit: int = 10) -> list[Book]:
+        """Get list of books from calibre database.
+
+        Args:
+        limit (int): Limit on total number of results
+
+        Returns:
+        list[Book]: List of books
+        """
         if limit <= 0:
-            error(f"limit {limit} not allowed")
+            raise ValidationError(f"limit {limit} not allowed")
 
-        cmd = f"{self.cdb_with_lib} list --for-machine --fields=all"
+        cmd = (
+            f"{self.cdb_with_lib} list "
+            f"--for-machine --fields=all "
+            f"--limit={str(limit)}"
+        )
+        out = self._run(cmd)
 
-        if limit:
-            cmd += f" --limit={str(limit)}"
+        books = json.loads(out)
+        res = []
+        if len(books):
+            for b in books:
+                res.append(Book(**b))
+        return res
 
-        return self._run(cmd)
-
-    # Add book with given file path
     # TODO check book_path exists and is valid file
     def add(self, book_path: str, **kwargs: Any) -> list[int]:
-        """
-        book_path: File path to book
-        **kwargs:
+        """Add a single book to calibre database.
+
+        Args:
+        book_path (str): Filepath to book on the filesystem.
+        kwargs (Any):
             authors: Authors separated by &. For example: "John Doe & Peter Brown"
             identifiers: Prefixed with corresponding specifier. For example:
                 "asin:XXXX, isbn:XXXX"
@@ -138,41 +196,49 @@ class CalibreWrapper:
             tags: Comma separated strings
             title: str
 
-        Returns list[int] of book IDs
+        Returns:
+        int: Book ID of added book
         """
 
         if not path.exists(book_path):
-            error(f"Failed to find book at {book_path}")
+            raise FileNotFoundError(f"Failed to find book at {book_path}")
 
         cmd = f"{self.cdb_with_lib} add {book_path}"
         cmd = self._handle_add_flags(cmd, kwargs)
-        out, err = self._run(cmd)
+        out = self._run(cmd)
 
-        if err:
-            error(err)
+        # TODO handle duplicates
+        # WARNING: The following books were not added as they already
+        # exist in the database (see --duplicates option or --automerge option):
+        #   [book]
 
-        if out:
-            book_ids_str = re.search(r"^Added book ids: ([0-9,]+)", out).group(1)
-            book_ids = book_ids_str.split(",")
-            return book_ids
+        book_ids_str = re.search(r"^Added book ids: ([0-9,]+)", out).group(1)
+        book_ids = book_ids_str.split(",")
 
-    # Add an empty book (with no formats)
-    def add_empty(self, **kwargs: Any):
+        # should add only one book (for now)
+        if len(book_ids) == 1:
+            return book_ids[0]
+
+    def add_empty(self, **kwargs: Any) -> list[int]:
+        """Add an empty book (with no formats) to the calibredb database
+
+        Args:
+        kwargs (Any): Similar to add()
+
+        Returns:
+        int: Book ID of added book.
+        """
         cmd = f"{self.cdb_with_lib} add --empty"
 
         cmd = self._handle_add_flags(cmd, kwargs)
-        out, err = self._run(cmd)
+        out = self._run(cmd)
 
-        if err:
-            error(err)
-
-        if out:
-            ids_str = re.search(r"^Added book ids: ([0-9,]+)", out).group(1)
-            ids = ids_str.split(",")
-            if len(ids):
-                return [int(i) for i in ids]
-            else:
-                return []
+        ids_str = re.search(r"^Added book ids: ([0-9,]+)", out).group(1)
+        ids = ids_str.split(",")
+        if len(ids):
+            return [int(i) for i in ids]
+        else:
+            return []
 
     # TODO handle when passing multiple of the same flag
     def _handle_add_flags(self, cmd: str, kwargs: Any):
@@ -191,61 +257,80 @@ class CalibreWrapper:
                     cmd += f" --{flag} {quote(str(value))}"
 
         # TODO handle unsupported flags
-        # logging.info(f"Unsupported flags {','.join(sorted(kwargs))}")
+        # self.logger.warning(f"Unsupported flags {','.join(sorted(kwargs))}")
         return cmd
 
-    # Remove book with id.
-    # Does not return output or err if ids do not exist
-    def remove(self, ids: list[int], permanent: bool = False):
+    def remove(self, ids: list[int], permanent: bool = False) -> str:
+        """Remove book from calibre database.
+        Fails silently  with no output if given IDs do not exist.
+
+        Args:
+        ids (list[int]): List of book IDs to remove
+        permanent (bool): Do not use the builtin trash can
+        """
+
         if not all(i >= 0 for i in ids):
-            error(f"ids {ids} not allowed")
+            raise ValidationError(f"ids {ids} not allowed")
 
         cmd = f'{self.cdb_with_lib} remove {",".join(map(str, ids))}'
-
         if permanent:
             cmd += " --permanent"
 
         return self._run(cmd)
 
-    # Add book format to existing book id
-    def add_format(self, id: int, replace: bool = False, data_file: bool = False):
-        if id <= 0:
-            error(f"id {id} not allowed")
+    def add_format(
+        self, id: int, replace: bool = False, data_file: bool = False
+    ) -> str:
+        """Add a book format to an existing book in the calibre database.
+
+        Args:
+        id (int): Book ID
+        replace (bool): Replace file if format already exists in book
+        data_file (bool):
+        """
+
+        validate_id(id)
 
         cmd = f"{self.cdb_with_lib} add_format {id}"
-
         if replace:
             cmd += " --dont-replace"
-
         if data_file:
             cmd += " --as-extra-data-file"
 
         return self._run(cmd)
 
-    # Remove book format from existing book.
-    # Format must be a file extension like EPUB, TXT etc.
-    def remove_format(self, id: int, format: str):
-        if id <= 0:
-            error(f"id {id} not allowed")
+    def remove_format(self, id: int, format: str) -> str:
+        """Remove book format from an existing book with given ID.
+
+        Args:
+        id (int): Book ID
+        format (str): File extension like EPUB, TXT etc.
+        """
+
+        validate_id(id)
 
         # TODO check format
         cmd = f"{self.cdb_with_lib} remove_format {id} {format}"
         return self._run(cmd)
 
-    # Returns XML metadata of given book id
     def show_metadata(self, id: int) -> str:
-        if id <= 0:
-            error(f"id {id} not allowed")
+        """Returns XML metadata of given in calibre database.
+
+        Args:
+        id (int): Book ID
+        """
+        validate_id(id)
 
         cmd = f"{self.cdb_with_lib} show_metadata --as-opf {id}"
         return self._run(cmd)
 
-    # Set XML metadata of given book id from given OPF file or flags
-    def set_metadata(self, id: int, metadata_path: str = None, **kwargs):
-        """
-        id: book ID to set metadata
-        metadata_path (Optional): Path to OPF metadata file
-        **kwargs:
+    def set_metadata(self, id: int, metadata_path: str = None, **kwargs) -> str:
+        """Set XML metadata of book with OPF file or kwargs.
+
+        Args:
+        id (int): Book ID
+        metadata_path (str): Path to OPF metadata file
+        kwargs (Any):
             author_sort:
             authors:
             comments:
@@ -264,14 +349,13 @@ class CalibreWrapper:
             title:
         """
 
-        if id <= 0:
-            error(f"id {id} not allowed")
+        validate_id(id)
 
         cmd = f"{self.cdb_with_lib} set_metadata {id}"
 
         if metadata_path:
             if not path.exists(metadata_path):
-                error(f"Metadata file {metadata_path} does not exist")
+                raise FileNotFoundError(f"Metadata file {metadata_path} does not exist")
             cmd += f" {metadata_path}"
 
         else:
@@ -294,8 +378,11 @@ class CalibreWrapper:
 
         return self._run(cmd)
 
-    # Export books with given ids to directory
-    def export(self, ids: list[int]):
+    def export(self, ids: list[int]) -> str:
+        """Export books from calibre database to filesystem
+
+        ids (list[int]): List of book IDs
+        """
         pass
 
 
@@ -304,6 +391,6 @@ def quote(s: str) -> str:
     return shlex.quote(s) if " " in s else s
 
 
-def error(message, exit_code=1):
-    logging.error(message)
-    sys.exit(exit_code)
+def validate_id(id: int) -> None:
+    if id <= 0:
+        raise ValidationError(f"{id} cannot be <= 0")

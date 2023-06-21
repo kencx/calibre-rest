@@ -11,9 +11,16 @@ def create_app(config_name="default"):
     cfg.from_object(config_map[config_name])
     # cfg.from_envvar("CALIBRE_REST_CONFIG")
 
-    cfg["CALIBREDB"] = CalibreWrapper(
-        app.config["CALIBREDB_PATH"], app.config["LIBRARY_PATH"]
-    )
+    flog = app.logger
+    flog.setLevel(cfg["LOG_LEVEL"])
+
+    try:
+        cfg["CALIBREDB"] = CalibreWrapper(
+            app.config["CALIBREDB_PATH"], app.config["LIBRARY_PATH"], flog
+        )
+    except FileNotFoundError as exc:
+        # exit immediately if fail to initialize wrapper object
+        raise SystemExit(exc)
 
     with app.app_context():
         import calibre_rest.routes
