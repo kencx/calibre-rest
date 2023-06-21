@@ -41,8 +41,13 @@ check:
 clean: check
 	- rm *.txt
 
-run:
+## run.dev: run Flask debug server
+run.dev:
 	flask --app 'calibre_rest:create_app("dev")' run --debug
+
+## run gunicorn server
+run:
+	gunicorn 'calibre_rest:create_app("prod")' -c gunicorn.py
 
 test:
 	pytest -v

@@ -242,7 +242,6 @@ class CalibreWrapper:
         else:
             return []
 
-    # TODO handle when passing multiple of the same flag
     def _handle_add_flags(self, cmd: str, kwargs: Any):
         for flag in self.ADD_FLAGS:
             value = kwargs.get(flag)
