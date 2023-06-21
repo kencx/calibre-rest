@@ -1,3 +1,5 @@
+import logging
+
 from flask import Flask
 
 from calibre_rest.calibre import CalibreWrapper
@@ -11,7 +13,10 @@ def create_app(config_name="default"):
     cfg.from_object(config_map[config_name])
     # cfg.from_envvar("CALIBRE_REST_CONFIG")
 
+    # attach gunicorn handlers if exist
     flog = app.logger
+    gunicorn_handlers = logging.getLogger("gunicorn").handlers
+    flog.handlers.extend(gunicorn_handlers)
     flog.setLevel(cfg["LOG_LEVEL"])
 
     try:
