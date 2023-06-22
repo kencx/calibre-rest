@@ -2,12 +2,13 @@ import json
 import tempfile
 from os import path
 
-from flask import Request, abort
+from flask import abort
 from flask import current_app as app
 from flask import jsonify, make_response, request
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
+from calibre_rest.errors import ExistingItemError, InvalidPayloadError
 from calibre_rest.models import Book
 
 calibredb = app.config["CALIBREDB"]
@@ -30,8 +31,7 @@ def get_book(id):
 # TODO list with sort, filter search, pagination
 @app.route("/books")
 def get_books():
-    """
-    Get list of books.
+    """Get list of books.
 
     Query Parameters:
     limit: Maximum number of results in a page
@@ -56,7 +56,9 @@ def get_books():
 
 @app.route("/books", methods=["POST"])
 def add_book():
-    """method: POST
+    """Add book to calibre library with book file and optional data.
+
+    method: POST
     headers:
         Content-Type: enctype=multipart/form-data
     data:
@@ -65,20 +67,20 @@ def add_book():
     """
 
     if (
-        request.content_type != "multipart/form-data"
-        or request.content_type != "application/json"
+        "multipart/form-data" not in request.content_type
+        and "application/json" not in request.content_type
     ):
-        abort(415, "Only multipart/form-data and/or application/json allowed")
+        abort(415, "Only multipart/form-data and application/json allowed")
 
     if "file" not in request.files:
-        abort(400, "No file provided")
+        raise InvalidPayloadError("No file provided")
 
     file = request.files["file"]
     if file and file.filename == "":
-        abort(400, "Invalid filename")
+        raise InvalidPayloadError("Invalid file or filename")
 
     if not allowed_file(file.filename):
-        abort(400, "File extension not allowed")
+        raise InvalidPayloadError(f"Invalid filename ({file.filename})")
 
     # save file to a temporary location for upload
     tempdir = tempfile.gettempdir()
@@ -86,10 +88,25 @@ def add_book():
     file.save(tempfilepath)
 
     if not path.isfile(tempfilepath):
-        abort(500)
+        raise FileNotFoundError(f"{tempfilepath} not found.")
 
-    book = extract_input_data(request)
-    id = calibredb.add(tempfilepath, **book)
+    # Check if optional input data exists in form field "data".
+    # If exists, check for "automerge" key to modify automerge behaviour.
+    # If any book field keys are present, add them to the book dict.
+
+    json_data = request.form.get("data")
+    validate_data(json_data, Book)
+
+    book = {}
+    automerge = "ignore"
+
+    if json_data is not None:
+        data = json.loads(json_data)
+        automerge = data.pop("automerge", "ignore")
+        if len(data):
+            book = Book(**data).todict()
+
+    id = calibredb.add_one(tempfilepath, automerge, **book)
     return response(201, jsonify(added_id=id))
 
 
@@ -103,8 +120,12 @@ def add_empty_book():
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    book = extract_input_data(request)
-    id = calibredb.add_empty(**book)
+    book = {}
+    if request.data is not None:
+        validate_data(request.data, Book)
+        book = request.get_json()
+
+    id = calibredb.add_one_empty(**book)
     return response(201, jsonify(id=id))
 
 
@@ -118,7 +139,11 @@ def update_book(id):
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    book = extract_input_data(request)
+    if request.data is None:
+        abort(400)
+
+    validate_data(request.data, Book)
+    book = request.get_json()
     id = calibredb.set_metadata(id, None, book)
     return response(200, jsonify(id=id))
 
@@ -153,6 +178,11 @@ def handle_http_error(e):
     return jsonify(error=str(e)), e.code
 
 
+@app.errorhandler(ExistingItemError)
+def handle_existing_item_error(e):
+    return jsonify(error=str(e)), 409
+
+
 @app.errorhandler(json.JSONDecodeError)
 def handle_json_decode_error(e):
     return jsonify(error=f"Error decoding JSON: {str(e)}"), 500
@@ -177,21 +207,31 @@ def response(status_code, data, headers={"Content-Type": "application/json"}):
     return response
 
 
-def extract_input_data(request: Request) -> dict:
-    data = request.form.get("data")
-    book = {}
+def validate_data(data: str, cls):
+    """Validate JSON string with Book.
 
-    if data is not None:
-        json_data = json.loads(data)
-        errors = Book.validate(json_data)
-        if len(errors):
-            return response(
-                500,
-                jsonify(errors=[{e.path.popleft(): e.message} for e in errors]),
-            )
-        book = Book(**json_data).todict()
-    return book
+    Args:
+    data (str): JSON string.
+
+    Raises:
+    HTTPException: 422 error code when validation fails
+    """
+    if data is None:
+        app.logger.warning("No input data provided")
+        return
+
+    json_data = json.loads(data)
+    errors = cls.validate(json_data)
+    if len(errors):
+        abort(
+            response(
+                422,
+                jsonify({"errors": [{e.path.popleft(): e.message} for e in errors]}),
+            ),
+        )
 
 
 def allowed_file(filename: str) -> bool:
-    return True
+    if filename.startswith("-"):
+        return False
+    return filename.lower().endswith(calibredb.ALLOWED_FILE_EXTENSIONS)

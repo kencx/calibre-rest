@@ -7,7 +7,7 @@ import subprocess
 from os import path
 from typing import Any
 
-from calibre_rest.errors import CalibreRuntimeError
+from calibre_rest.errors import CalibreRuntimeError, ExistingItemError
 from calibre_rest.models import Book
 
 
@@ -41,6 +41,38 @@ class CalibreWrapper:
         "timestamp",
         "title",
     ]
+    ALLOWED_FILE_EXTENSIONS = (
+        ".azw",
+        ".azw3",
+        ".azw4",
+        ".cbz",
+        ".cbr",
+        ".cb7",
+        ".cbc",
+        ".chm",
+        ".djvu",
+        ".docx",
+        ".epub",
+        ".fb2",
+        ".fbz",
+        ".html",
+        ".htmlz",
+        ".lit",
+        ".lrf",
+        ".mobi",
+        ".odt",
+        ".pdf",
+        ".prc",
+        ".pdb",
+        ".pml",
+        ".rb",
+        ".rtf",
+        ".snb",
+        ".tcr",
+        ".txt",
+        ".txtz",
+    )
+    AUTOMERGE_ENUM = ["overwrite", "new_record", "ignore"]
 
     def __init__(self, calibredb: str, lib: str, logger=None) -> None:
         """Initialize the calibredb command-line wrapper.
@@ -73,18 +105,19 @@ class CalibreWrapper:
         self.lib = lib
         self.cdb_with_lib = f"{executable} --with-library {lib}"
 
-    def _run(self, cmd: str) -> str:
+    def _run(self, cmd: str) -> (str, str):
         """Execute calibredb on the command line.
 
-        Any stderr that is returned with a zero exit code will be logged as
-        warnings.
+        Any stderr that is returned with a zero exit code will also be logged as
+        a warning.
 
         Args:
         cmd (str): Full command string to execute. This string will be split
             appropriately with shlex.split.
 
         Returns:
-        str: Output of command
+        str: Stdout of command
+        str: Stderr of command
 
         Raises:
         FileNotFoundError: If the command's executable is invalid.
@@ -110,13 +143,13 @@ class CalibreWrapper:
         if process.stderr:
             self.logger.warning(process.stderr)
 
-        return process.stdout
+        return process.stdout, process.stderr
 
     def version(self) -> str:
         """Get calibredb version."""
 
         cmd = f"{self.cdb} --version"
-        out = self._run(cmd)
+        out, _ = self._run(cmd)
 
         match = re.search(re.compile(r"calibre ([\d.]+)"), out)
         if match is not None:
@@ -141,7 +174,7 @@ class CalibreWrapper:
             f"--for-machine --fields=all "
             f"--search=id:{id} --limit=1"
         )
-        out = self._run(cmd)
+        out, _ = self._run(cmd)
 
         # object_hook arg cannot be used as it results in a nested instance
         # in the identifiers dict field
@@ -173,7 +206,7 @@ class CalibreWrapper:
             f"--for-machine --fields=all "
             f"--limit={str(limit)}"
         )
-        out = self._run(cmd)
+        out, _ = self._run(cmd)
 
         books = json.loads(out)
         res = []
@@ -182,11 +215,16 @@ class CalibreWrapper:
                 res.append(Book(**b))
         return res
 
-    def add(self, book_path: str, **kwargs: Any) -> list[int]:
+    def add_one(self, book_path: str, automerge: str = "ignore", **kwargs: Any) -> int:
         """Add a single book to calibre database.
 
         Args:
-        book_path (str): Filepath to book on the filesystem.
+        book_path (str): Filepath to book on the filesystem. Filenames cannot
+        begin with a hyphen.
+        automerge (str): Accepts one of the following:
+            ignore: Duplicate formats are discarded
+            overwrite: Duplicate formats are overwritten with newly added files
+            new_record: Duplicate formats are placed into new book record
         kwargs (Any):
             authors: Authors separated by &. For example: "John Doe & Peter Brown"
             identifiers: Prefixed with corresponding specifier. For example:
@@ -206,23 +244,20 @@ class CalibreWrapper:
             raise FileNotFoundError(f"Failed to find book at {book_path}")
 
         cmd = f"{self.cdb_with_lib} add {book_path}"
-        cmd = self._handle_add_flags(cmd, kwargs)
-        out = self._run(cmd)
 
-        # TODO handle duplicates
-        # WARNING: The following books were not added as they already
-        # exist in the database (see --duplicates option or --automerge option):
-        #   [book]
+        if automerge in self.AUTOMERGE_ENUM:
+            cmd += f" --automerge={automerge}"
+        else:
+            logging.warning(
+                f'automerge value "{automerge}" not supported. '
+                f'Using "--automerge ignore".'
+            )
+            cmd += " --automerge=ignore"
 
-        book_ids_str = re.search(r"^Added book ids: ([0-9,]+)", out).group(1)
-        book_ids = book_ids_str.split(",")
+        return self._run_add(cmd, **kwargs)
 
-        # should add only one book (for now)
-        if len(book_ids) == 1:
-            return book_ids[0]
-
-    def add_empty(self, **kwargs: Any) -> list[int]:
-        """Add an empty book (with no formats) to the calibredb database
+    def add_one_empty(self, **kwargs: Any) -> int:
+        """Add one empty book (with no formats) to the calibredb database
 
         Args:
         kwargs (Any): Similar to add()
@@ -230,17 +265,53 @@ class CalibreWrapper:
         Returns:
         int: Book ID of added book.
         """
+
         cmd = f"{self.cdb_with_lib} add --empty"
+        return self._run_add(cmd, **kwargs)
 
-        cmd = self._handle_add_flags(cmd, kwargs)
-        out = self._run(cmd)
+    def _run_add(self, command_str: str, **kwargs: Any) -> int:
+        cmd = self._handle_add_flags(command_str, kwargs)
+        out, stderr = self._run(cmd)
 
-        ids_str = re.search(r"^Added book ids: ([0-9,]+)", out).group(1)
-        ids = ids_str.split(",")
-        if len(ids):
-            return [int(i) for i in ids]
-        else:
-            return []
+        BOOK_ADDED_REGEX = re.compile(r"^Added book ids: ([0-9,]+)")
+        BOOK_MERGED_REGEX = re.compile(r"^Merged book ids: ([0-9,]+)")
+        BOOK_IGNORED_REGEX = re.compile(
+            r"^The following books were not added as they already exist.*"
+        )
+
+        book_ignored_match = re.search(BOOK_IGNORED_REGEX, stderr)
+        if book_ignored_match is not None:
+            out = out.strip("\n ")
+            logging.info(f"Books {out} already exist. Ignoring...")
+            raise ExistingItemError(
+                f"Book {out} already exists. Include automerge=overwrite to overwrite."
+            )
+
+        book_merged_match = re.search(BOOK_MERGED_REGEX, out)
+        if book_merged_match is not None:
+            logging.info("Books merged")
+            book_ids_str = book_merged_match.group(1)
+            book_ids = book_ids_str.split(",")
+
+            # return merged book
+            if len(book_ids) == 1:
+                return book_ids[0]
+            else:
+                return
+
+        book_added_match = re.search(BOOK_ADDED_REGEX, out)
+        if book_added_match is None:
+            logging.warning(f'No books added after running "{cmd}"')
+            raise Exception(
+                "No books were added because something went wrong. Please look at logs to troubleshoot."
+            )
+
+        book_ids_str = book_added_match.group(1)
+        book_ids = book_ids_str.split(",")
+
+        # should add only one book
+        if len(book_ids) == 1:
+            return book_ids[0]
 
     def _handle_add_flags(self, cmd: str, kwargs: Any):
         for flag in self.ADD_FLAGS:
@@ -277,7 +348,8 @@ class CalibreWrapper:
         if permanent:
             cmd += " --permanent"
 
-        return self._run(cmd)
+        out, _ = self._run(cmd)
+        return out
 
     def add_format(
         self, id: int, replace: bool = False, data_file: bool = False
@@ -298,7 +370,8 @@ class CalibreWrapper:
         if data_file:
             cmd += " --as-extra-data-file"
 
-        return self._run(cmd)
+        out, _ = self._run(cmd)
+        return out
 
     def remove_format(self, id: int, format: str) -> str:
         """Remove book format from an existing book with given ID.
@@ -312,7 +385,8 @@ class CalibreWrapper:
 
         # TODO check format
         cmd = f"{self.cdb_with_lib} remove_format {id} {format}"
-        return self._run(cmd)
+        out, _ = self._run(cmd)
+        return out
 
     def show_metadata(self, id: int) -> str:
         """Returns XML metadata of given in calibre database.
@@ -323,7 +397,8 @@ class CalibreWrapper:
         validate_id(id)
 
         cmd = f"{self.cdb_with_lib} show_metadata --as-opf {id}"
-        return self._run(cmd)
+        out, _ = self._run(cmd)
+        return out
 
     def set_metadata(self, id: int, metadata_path: str = None, **kwargs) -> str:
         """Set XML metadata of book with OPF file or kwargs.
@@ -378,7 +453,8 @@ class CalibreWrapper:
                         cmd += f" --field {field}:{quote(str(value))}"
 
         # TODO return id of updated book
-        return self._run(cmd)
+        out, _ = self._run(cmd)
+        return out
 
     def export(self, ids: list[int]) -> str:
         """Export books from calibre database to filesystem
