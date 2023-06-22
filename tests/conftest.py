@@ -1,9 +1,12 @@
+import os
 from uuid import uuid4
 
 import pytest
 from flask import Flask, jsonify
 
 from calibre_rest import create_app
+from calibre_rest.calibre import CalibreWrapper
+from config import TestConfig
 
 
 # https://gist.github.com/eruvanos/f6f62edb368a20aaa880e12976620db8
@@ -38,3 +41,13 @@ def app():
 @pytest.fixture()
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture()
+def calibre():
+    if os.path.exists(TestConfig.CALIBREDB_PATH) and os.path.exists(
+        TestConfig.LIBRARY_PATH
+    ):
+        return CalibreWrapper(TestConfig.CALIBREDB_PATH, TestConfig.LIBRARY_PATH)
+    else:
+        pytest.skip("calibredb not installed")

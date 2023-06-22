@@ -5,7 +5,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 class Config:
-    TESTING = True
+    TESTING = False
     CALIBREDB_PATH = os.environ.get("CALIBREDB_PATH", "./calibre-bin/calibredb")
     LIBRARY_PATH = os.environ.get("CALIBRE_LIBRARY", "./library")
     LOG_LEVEL = os.environ.get("CALIBRE_LOG", "INFO")
@@ -15,8 +15,14 @@ class DevConfig(Config):
     LOG_LEVEL = "DEBUG"
 
 
+class TestConfig(Config):
+    TESTING = True
+    CALIBREDB_PATH = os.environ.get("CALIBREDB_TEST_PATH", "./calibre-copy/calibredb")
+    LIBRARY_PATH = os.environ.get("CALIBRE_TEST_LIBRARY", "./library")
+
+
 class ProdConfig(Config):
-    TESTING = False
+    pass
 
 
 config_map = {

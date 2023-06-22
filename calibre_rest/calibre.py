@@ -5,24 +5,25 @@ import shlex
 import shutil
 import subprocess
 from os import path
-from typing import Any
 
 from calibre_rest.errors import CalibreRuntimeError, ExistingItemError
 from calibre_rest.models import Book
 
 
 class CalibreWrapper:
-    ADD_FLAGS = [
-        "authors",
-        "cover",
-        "identifier",
-        "isbn",
-        "languages",
-        "series",
-        "series-index",
-        "tags",
-        "title",
-    ]
+    # Flags for calibredb add subcommand. The keys represent the attributes
+    # while the values represent their flags
+    ADD_FLAGS = {
+        "authors": "authors",
+        "cover": "cover",
+        "identifiers": "identifier",
+        "isbn": "isbn",
+        "languages": "languages",
+        "series": "series",
+        "series_index": "series-index",
+        "tags": "tags",
+        "title": "title",
+    }
     UPDATE_FLAGS = [
         "author_sort",
         "authors",
@@ -34,9 +35,8 @@ class CalibreWrapper:
         "publisher",
         "rating",
         "series",
-        "series-index",
+        "series_index",
         "size",
-        "sort",
         "tags",
         "timestamp",
         "title",
@@ -76,16 +76,12 @@ class CalibreWrapper:
 
     def __init__(self, calibredb: str, lib: str, logger=None) -> None:
         """Initialize the calibredb command-line wrapper.
+        To verify the executable and library paths, use check().
 
         Args:
         calibredb (str): Path to calibredb executable.
         lib (str): Path to calibre library on the filesystem.
         logger (logging.Logger): Custom logger object
-
-        Raises:
-        FileNotFoundError: If the calibredb executable is not valid
-        FileNotFoundError: If the calibre metadata.db is not found in the given
-            library path
         """
 
         if logger is None:
@@ -93,17 +89,27 @@ class CalibreWrapper:
         self.logger = logger
 
         executable = path.abspath(calibredb)
-        if not shutil.which(executable):
-            raise FileNotFoundError(f"{executable} is not a valid executable")
-
-        if not path.exists(path.join(lib, "metadata.db")):
-            raise FileNotFoundError(
-                f"Failed to find Calibre database file {path.join(lib, 'metadata.db')}"
-            )
-
         self.cdb = executable
         self.lib = lib
         self.cdb_with_lib = f"{executable} --with-library {lib}"
+
+    def check(self) -> None:
+        """Check wrapper's executable and library exists. This is decoupled from
+        the class' initialization to allow for easier testing.
+
+        Raises:
+        FileNotFoundError: If the calibredb executable is not valid
+        FileNotFoundError: If the calibre metadata.db is not found in the given
+            library path
+        """
+
+        if not shutil.which(self.cdb):
+            raise FileNotFoundError(f"{self.cdb} is not a valid executable")
+
+        if not path.exists(path.join(self.lib, "metadata.db")):
+            raise FileNotFoundError(
+                f"Failed to find Calibre database file {path.join(self.lib, 'metadata.db')}"
+            )
 
     def _run(self, cmd: str) -> (str, str):
         """Execute calibredb on the command line.
@@ -215,26 +221,19 @@ class CalibreWrapper:
                 res.append(Book(**b))
         return res
 
-    def add_one(self, book_path: str, automerge: str = "ignore", **kwargs: Any) -> int:
+    def add_one(
+        self, book_path: str, book: Book = None, automerge: str = "ignore"
+    ) -> int:
         """Add a single book to calibre database.
 
         Args:
         book_path (str): Filepath to book on the filesystem. Filenames cannot
         begin with a hyphen.
+        book (Book): Optional book instance
         automerge (str): Accepts one of the following:
-            ignore: Duplicate formats are discarded
+            ignore: Duplicate formats are discarded (default)
             overwrite: Duplicate formats are overwritten with newly added files
             new_record: Duplicate formats are placed into new book record
-        kwargs (Any):
-            authors: Authors separated by &. For example: "John Doe & Peter Brown"
-            identifiers: Prefixed with corresponding specifier. For example:
-                "asin:XXXX, isbn:XXXX"
-            isbn: str
-            languages: Comma separated strings
-            series: str
-            series_index: str
-            tags: Comma separated strings
-            title: str
 
         Returns:
         int: Book ID of added book
@@ -254,23 +253,38 @@ class CalibreWrapper:
             )
             cmd += " --automerge=ignore"
 
-        return self._run_add(cmd, **kwargs)
+        return self._run_add(cmd, book)
 
-    def add_one_empty(self, **kwargs: Any) -> int:
-        """Add one empty book (with no formats) to the calibredb database
+    def add_one_empty(self, book: Book = None) -> int:
+        """Add one empty book (with no formats) to the calibredb database.
 
         Args:
-        kwargs (Any): Similar to add()
+        book (Book): Optional book instance
 
         Returns:
         int: Book ID of added book.
         """
 
         cmd = f"{self.cdb_with_lib} add --empty"
-        return self._run_add(cmd, **kwargs)
+        return self._run_add(cmd, book)
 
-    def _run_add(self, command_str: str, **kwargs: Any) -> int:
-        cmd = self._handle_add_flags(command_str, kwargs)
+    def _run_add(self, cmd: str, book: Book = None) -> int:
+        """Run calibredb add subcommand for all add_* methods.
+
+        Args:
+        cmd (str): Command string to run
+        book (Book): Optional book instance
+
+        Returns:
+        int: Book ID of added book.
+
+        Raises:
+        ExistingItemError: If books to be added already exists and
+        automerge="ignore".
+        Exception: If books added that were not ignored or merged, due to
+        unforeseen error.
+        """
+        cmd = self._handle_add_flags(cmd, book)
         out, stderr = self._run(cmd)
 
         BOOK_ADDED_REGEX = re.compile(r"^Added book ids: ([0-9,]+)")
@@ -296,8 +310,6 @@ class CalibreWrapper:
             # return merged book
             if len(book_ids) == 1:
                 return book_ids[0]
-            else:
-                return
 
         book_added_match = re.search(BOOK_ADDED_REGEX, out)
         if book_added_match is None:
@@ -313,23 +325,43 @@ class CalibreWrapper:
         if len(book_ids) == 1:
             return book_ids[0]
 
-    def _handle_add_flags(self, cmd: str, kwargs: Any):
-        for flag in self.ADD_FLAGS:
-            value = kwargs.get(flag)
+    def _handle_add_flags(self, cmd: str, book: Book = None):
+        """Build flags for add_* methods.
 
+        Args:
+        cmd (string): Command string to append flags to
+        book (Book): Optional book instance. All author values will be joined
+        with the " & " separator. All other list values will be joined with the
+        "," separator. All identifiers pairs will be turned into the form
+        "abc:123,foo:bar".
+
+        Returns:
+        string: Full command string with flags
+        """
+        if book is None:
+            return cmd
+
+        for flag in self.ADD_FLAGS.keys():
+            value = getattr(book, flag)
             if value:
-                if flag == "identifier" and type(value) is str:
-                    identifiers = value.split(",")
+                flag_name = self.ADD_FLAGS[flag]
 
-                    # ensure valid identifier of form ABC:XXX
-                    for i in identifiers:
-                        if len(i.split(":")) == 2:
-                            cmd += f" --{flag} {quote(i)}"
-                else:
-                    cmd += f" --{flag} {quote(str(value))}"
+                if flag == "identifiers":
+                    for k, v in value.items():
+                        # ensure valid form of ABC:XXX
+                        identifier = f"{k}:{v}"
+                        cmd += f" --{flag_name} {quote(identifier)}"
+                    break
 
-        # TODO handle unsupported flags
-        # self.logger.warning(f"Unsupported flags {','.join(sorted(kwargs))}")
+                elif isinstance(value, list):
+                    if flag == "authors":
+                        value = list(map(str.strip, value))
+                        value = " & ".join(value)
+                    else:
+                        value = list(map(str.strip, value))
+                        value = ",".join(value)
+
+                cmd += f" --{flag_name} {quote(str(value))}"
         return cmd
 
     def remove(self, ids: list[int], permanent: bool = False) -> str:
@@ -400,29 +432,15 @@ class CalibreWrapper:
         out, _ = self._run(cmd)
         return out
 
-    def set_metadata(self, id: int, metadata_path: str = None, **kwargs) -> str:
+    def set_metadata(
+        self, id: int, book: Book = None, metadata_path: str = None
+    ) -> str:
         """Set XML metadata of book with OPF file or kwargs.
 
         Args:
         id (int): Book ID
+        book (Book): Optional Book instance
         metadata_path (str): Path to OPF metadata file
-        kwargs (Any):
-            author_sort:
-            authors:
-            comments:
-            id:
-            identifiers:
-            languages:
-            pubdate:
-            publisher:
-            rating:
-            series:
-            series-index:
-            size:
-            sort:
-            tags:
-            timestamp:
-            title:
         """
 
         validate_id(id)
@@ -434,27 +452,39 @@ class CalibreWrapper:
                 raise FileNotFoundError(f"Metadata file {metadata_path} does not exist")
             cmd += f" {metadata_path}"
 
-        else:
-            for field in self.UPDATE_FLAGS:
-                value = kwargs.get(field)
-
-                if value:
-                    if field == "identifiers" and type(value) is str:
-                        identifiers = value.split(",")
-                        identifier_str = ""
-
-                        # build string of form XXX:ABC,FOO:BAR
-                        for i in identifiers:
-                            if len(i.split(":")) == 2:
-                                identifier_str += f"{quote(i)},"
-                        cmd += f" --field {field}:{identifier_str.rstrip(',')}"
-
-                    else:
-                        cmd += f" --field {field}:{quote(str(value))}"
+        elif book is not None:
+            self._handle_update_flags(cmd, book)
 
         # TODO return id of updated book
         out, _ = self._run(cmd)
         return out
+
+    def _handle_update_flags(self, cmd: str, book: Book = None) -> str:
+        for field in self.UPDATE_FLAGS:
+            value = getattr(book, field)
+
+            if value:
+                if field == "identifiers":
+                    # format: --field identifiers:XXX:ABC,foo:bar
+                    strs = []
+                    for k, v in value.items():
+                        identifier_str = f"{k}:{v}"
+                        strs.append(identifier_str)
+                    cmd += f" --field {field}:{quote(','.join(strs))}"
+                    break
+
+                elif isinstance(value, list):
+                    if field == "authors":
+                        # format: --field "authors:Foo Bar & Bar Baz"
+                        value = list(map(str.strip, value))
+                        value = " & ".join(value)
+                    else:
+                        value = list(map(str.strip, value))
+                        value = ",".join(value)
+
+                value = quote(f"{field}:{value}")
+                cmd += f" --field {value}"
+        return cmd
 
     def export(self, ids: list[int]) -> str:
         """Export books from calibre database to filesystem

@@ -97,16 +97,17 @@ def add_book():
     json_data = request.form.get("data")
     validate_data(json_data, Book)
 
-    book = {}
+    book = Book()
     automerge = "ignore"
 
     if json_data is not None:
         data = json.loads(json_data)
         automerge = data.pop("automerge", "ignore")
         if len(data):
-            book = Book(**data).todict()
+            # TODO catch TypeError from unrecognized keys
+            book = Book(**data)
 
-    id = calibredb.add_one(tempfilepath, automerge, **book)
+    id = calibredb.add_one(tempfilepath, book, automerge)
     return response(201, jsonify(added_id=id))
 
 
@@ -129,6 +130,7 @@ def add_empty_book():
     return response(201, jsonify(id=id))
 
 
+# TODO incomplete
 @app.route("/books/<int:id>", methods=["PUT"])
 def update_book(id):
     """method: POST

@@ -1,3 +1,4 @@
+import inspect
 from dataclasses import asdict, dataclass, field
 
 from jsonschema import Draft202012Validator
@@ -6,7 +7,7 @@ from jsonschema import Draft202012Validator
 @dataclass
 class Book:
     """
-    authors: Multiple authors separated by &
+    authors:
     author_sort:
     comments: in html
     cover:
@@ -29,7 +30,7 @@ class Book:
     uuid:
     """
 
-    authors: str = ""
+    authors: list[str] = field(default_factory=list)
     author_sort: str = ""
     comments: str = ""
     cover: str = ""
@@ -54,7 +55,7 @@ class Book:
     SCHEMA = {
         "type": "object",
         "properties": {
-            "authors": {"type": "string"},
+            "authors": {"type": "array", "items": {"type": "string"}},
             "author_sort": {"type": "string"},
             "comments": {"type": "string"},
             "cover": {"type": "string"},
@@ -84,9 +85,6 @@ class Book:
         # TODO valid identifiers object must be dict(str, str)
         # TODO handle redundant data fields
         return sorted(self.v.iter_errors(instance), key=str)
-
-    def todict(self):
-        return asdict(self)
 
 
 class PaginatedResults:

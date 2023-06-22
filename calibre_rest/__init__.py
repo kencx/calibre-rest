@@ -20,9 +20,11 @@ def create_app(config_name="default"):
     flog.setLevel(cfg["LOG_LEVEL"])
 
     try:
-        cfg["CALIBREDB"] = CalibreWrapper(
+        cdb = CalibreWrapper(
             app.config["CALIBREDB_PATH"], app.config["LIBRARY_PATH"], flog
         )
+        cdb.check()
+        cfg["CALIBREDB"] = cdb
     except FileNotFoundError as exc:
         # exit immediately if fail to initialize wrapper object
         raise SystemExit(exc)
