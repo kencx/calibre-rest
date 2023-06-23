@@ -7,19 +7,17 @@ Makefile
 *.in
 dev-requirements.txt
 
-docker
 docker-compose.*
 .dockerignore
 
 .venv
 tests
 testdata
-*.pyc
+**/*.pyc
 .coverage
-__pycache__
-.pytest_cache
+**/__pycache__
+**/.pytest_cache
 
 library
 calibre-bin
 calibre-copy
-

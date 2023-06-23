@@ -1,6 +1,6 @@
 from multiprocessing import cpu_count
 
-bind = "0.0.0.0:5000"
+bind = "unix:/tmp/gunicorn.sock"
 
 # Maximum number of backlog requests to hold onto before users get error messages.
 backlog = 100

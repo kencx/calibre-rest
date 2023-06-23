@@ -1,18 +1,34 @@
 version: '3.6'
 services:
-  calibre_rest:
+  app:
     container_name: calibre_rest
     build:
       context: .
-      dockerfile: docker/Dockerfile.app
-    image: calibre_rest:latest
+      dockerfile: docker/app.Dockerfile
+    image: calibre_rest:0.1.0-app
     restart: unless-stopped
-    user: 1000:1000
     environment:
       - "CALIBREDB_PATH=/opt/calibre/calibredb"
       - "CALIBRE_LIBRARY=/library"
-      # - "CALIBRE_LOG=DEBUG"
+      - "CALIBRE_LOG=INFO"
     ports:
-      - 5000:5000
+      - 80:80
+    volumes:
+      - "./library:/library"
+      - "./calibre-bin:/opt/calibre"
+
+  calibre:
+    container_name: calibre_rest_calibre
+    build:
+      context: .
+      dockerfile: docker/calibre.Dockerfile
+    image: calibre_rest:0.1.0-calibre
+    restart: unless-stopped
+    environment:
+      - "CALIBREDB_PATH=/opt/calibre/calibredb"
+      - "CALIBRE_LIBRARY=/library"
+      - "CALIBRE_LOG=DEBUG"
+    ports:
+      - 80:80
     volumes:
       - "./library:/library"
