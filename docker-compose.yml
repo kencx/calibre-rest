@@ -9,9 +9,9 @@ services:
     image: ghcr.io/kencx/calibre_rest:0.1.0-app
     restart: unless-stopped
     environment:
-      - "CALIBREDB_PATH=/opt/calibre/calibredb"
-      - "CALIBRE_LIBRARY=/library"
-      - "CALIBRE_LOG=INFO"
+      - "CALIBRE_REST_PATH=/opt/calibre/calibredb"
+      - "CALIBRE_REST_LIBRARY=/library"
+      - "CALIBRE_REST_LOG_LEVEL=INFO"
     ports:
       - 8000:80
     volumes:
@@ -26,9 +26,9 @@ services:
     image: ghcr.io/kencx/calibre_rest:0.1.0-calibre
     restart: unless-stopped
     environment:
-      - "CALIBREDB_PATH=/opt/calibre/calibredb"
-      - "CALIBRE_LIBRARY=/library"
-      - "CALIBRE_LOG=DEBUG"
+      - "CALIBRE_REST_PATH=/opt/calibre/calibredb"
+      - "CALIBRE_REST_LIBRARY=/library"
+      - "CALIBRE_REST_LOG_LEVEL=DEBUG"
     ports:
       - 8000:80
     volumes:

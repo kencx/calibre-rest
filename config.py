@@ -6,9 +6,11 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 class Config:
     TESTING = False
-    CALIBREDB_PATH = os.environ.get("CALIBREDB_PATH", "/opt/calibre/calibredb")
-    LIBRARY_PATH = os.environ.get("CALIBRE_LIBRARY", "./library")
-    LOG_LEVEL = os.environ.get("CALIBRE_LOG", "INFO")
+    CALIBREDB_PATH = os.environ.get("CALIBRE_REST_PATH", "/opt/calibre/calibredb")
+    LIBRARY_PATH = os.environ.get("CALIBRE_REST_LIBRARY", "./library")
+    CALIBREDB_USERNAME = os.environ.get("CALIBRE_REST_USERNAME", "")
+    CALIBREDB_PASSWORD = os.environ.get("CALIBRE_REST_PASSWORD", "")
+    LOG_LEVEL = os.environ.get("CALIBRE_REST_LOG_LEVEL", "INFO")
 
 
 class DevConfig(Config):
@@ -17,8 +19,8 @@ class DevConfig(Config):
 
 class TestConfig(Config):
     TESTING = True
-    CALIBREDB_PATH = os.environ.get("CALIBREDB_TEST_PATH", "./calibre/calibredb")
-    LIBRARY_PATH = os.environ.get("CALIBRE_TEST_LIBRARY", "./library")
+    CALIBREDB_PATH = os.environ.get("CALIBRE_REST_TEST_PATH", "./calibre/calibredb")
+    LIBRARY_PATH = os.environ.get("CALIBRE_REST_TEST_LIBRARY", "./library")
 
 
 class ProdConfig(Config):

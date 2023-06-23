@@ -74,7 +74,14 @@ class CalibreWrapper:
     )
     AUTOMERGE_ENUM = ["overwrite", "new_record", "ignore"]
 
-    def __init__(self, calibredb: str, lib: str, logger=None) -> None:
+    def __init__(
+        self,
+        calibredb: str,
+        lib: str,
+        username: str = "",
+        password: str = "",
+        logger=None,
+    ) -> None:
         """Initialize the calibredb command-line wrapper.
         To verify the executable and library paths, use check().
 
@@ -91,6 +98,9 @@ class CalibreWrapper:
         self.cdb = path.abspath(calibredb)
         self.lib = path.abspath(lib)
         self.cdb_with_lib = f"{self.cdb} --with-library {self.lib}"
+
+        if username != "" and password != "":
+            self.cdb_with_lib += f" --username {username} --password {password}"
 
     def check(self) -> None:
         """Check wrapper's executable and library exists. This is decoupled from
