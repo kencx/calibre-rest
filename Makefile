@@ -1,4 +1,4 @@
-.PHONY: help all base dev upgrade check clean run test build build.base build.app build.calibre
+.PHONY: help all base dev upgrade check clean run test build base.build
 
 help:
 	@echo 'Usage:'
@@ -53,17 +53,12 @@ run:
 test:
 	pytest -v
 
-## build.base: build base image
-build.base: docker/base.Dockerfile
+## build.base: build base Docker image
+base.build: docker/base.Dockerfile
 	docker build . -f docker/base.Dockerfile -t calibre_rest_base:latest
 
-## build.app: build app packaged without calibre
-build.app: build.base docker/app.Dockerfile
-	docker build -f docker/app.Dockerfile -t calibre_rest:0.1.0-app .
+%.build: docker/%.Dockerfile base.build
+	docker build . -f $< -t calibre_rest:0.1.0-$*
 
-## build.calibre: build app packaged with calibre
-build.calibre: build.base docker/calibre.Dockerfile
-	docker build -f docker/calibre.Dockerfile -t calibre_rest:0.1.0-calibre .
-
-## build: build all
-build: build.app build.calibre
+## build: build all Docker images
+build: app.build calibre.build

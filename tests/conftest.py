@@ -6,7 +6,7 @@ from flask import Flask, jsonify
 
 from calibre_rest import create_app
 from calibre_rest.calibre import CalibreWrapper
-from config import TestConfig
+from config import config_map
 
 
 # https://gist.github.com/eruvanos/f6f62edb368a20aaa880e12976620db8
@@ -33,21 +33,23 @@ class MockServer:
 
 
 @pytest.fixture()
+def calibre():
+    test_config = config_map["test"]
+
+    if os.path.exists(test_config.CALIBREDB_PATH) and os.path.exists(
+        test_config.LIBRARY_PATH
+    ):
+        return CalibreWrapper(test_config.CALIBREDB_PATH, test_config.LIBRARY_PATH)
+    else:
+        pytest.skip("calibredb not installed")
+
+
+@pytest.fixture()
 def app():
-    app = create_app("dev")
+    app = create_app("test")
     yield MockServer(app)
 
 
 @pytest.fixture()
 def client(app):
     return app.test_client()
-
-
-@pytest.fixture()
-def calibre():
-    if os.path.exists(TestConfig.CALIBREDB_PATH) and os.path.exists(
-        TestConfig.LIBRARY_PATH
-    ):
-        return CalibreWrapper(TestConfig.CALIBREDB_PATH, TestConfig.LIBRARY_PATH)
-    else:
-        pytest.skip("calibredb not installed")

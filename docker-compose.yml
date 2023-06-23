@@ -1,3 +1,4 @@
+---
 version: '3.6'
 services:
   app:
@@ -5,14 +6,14 @@ services:
     build:
       context: .
       dockerfile: docker/app.Dockerfile
-    image: calibre_rest:0.1.0-app
+    image: ghcr.io/kencx/calibre_rest:0.1.0-app
     restart: unless-stopped
     environment:
       - "CALIBREDB_PATH=/opt/calibre/calibredb"
       - "CALIBRE_LIBRARY=/library"
       - "CALIBRE_LOG=INFO"
     ports:
-      - 80:80
+      - 8000:80
     volumes:
       - "./library:/library"
       - "./calibre-bin:/opt/calibre"
@@ -22,13 +23,13 @@ services:
     build:
       context: .
       dockerfile: docker/calibre.Dockerfile
-    image: calibre_rest:0.1.0-calibre
+    image: ghcr.io/kencx/calibre_rest:0.1.0-calibre
     restart: unless-stopped
     environment:
       - "CALIBREDB_PATH=/opt/calibre/calibredb"
       - "CALIBRE_LIBRARY=/library"
       - "CALIBRE_LOG=DEBUG"
     ports:
-      - 80:80
+      - 8000:80
     volumes:
       - "./library:/library"
