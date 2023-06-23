@@ -88,7 +88,7 @@ $ source .venv/bin/activate
 $ python3 -m pip install -r requirements.txt
 
 # install calibre
-$ ./install_calibre.sh
+$ wget -nv -O- https://download.calibre-ebook.com/linux-installer.sh | sudo sh /dev/stdin
 ```
 
 Start the server with env variables:

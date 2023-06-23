@@ -58,7 +58,7 @@ base.build: docker/base.Dockerfile
 	docker build . -f docker/base.Dockerfile -t calibre_rest_base:latest
 
 %.build: docker/%.Dockerfile base.build
-	docker build . -f $< -t calibre_rest:0.1.0-$*
+	docker build . -f $< -t calibre_rest:$(version)-$*
 
 ## build: build all Docker images
 build: app.build calibre.build
