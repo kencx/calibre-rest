@@ -88,10 +88,9 @@ class CalibreWrapper:
             logger = logging.getLogger(__name__)
         self.logger = logger
 
-        executable = path.abspath(calibredb)
-        self.cdb = executable
-        self.lib = lib
-        self.cdb_with_lib = f"{executable} --with-library {lib}"
+        self.cdb = path.abspath(calibredb)
+        self.lib = path.abspath(lib)
+        self.cdb_with_lib = f"{self.cdb} --with-library {self.lib}"
 
     def check(self) -> None:
         """Check wrapper's executable and library exists. This is decoupled from
@@ -187,7 +186,8 @@ class CalibreWrapper:
         try:
             b = json.loads(out)
         except json.JSONDecodeError as exc:
-            self.logger.error(f"Error decoding JSON: {exc}")
+            self.logger.error(f"Error decoding JSON: {exc}\n\n{out}")
+            return
 
         # "calibredb list" returns a list, regardless of the limit or number of
         # results.

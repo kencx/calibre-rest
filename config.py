@@ -27,6 +27,7 @@ class ProdConfig(Config):
 
 config_map = {
     "dev": DevConfig,
+    "test": TestConfig,
     "prod": ProdConfig,
     "default": DevConfig,
 }

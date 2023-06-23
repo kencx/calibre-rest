@@ -146,8 +146,10 @@ def update_book(id):
 
     validate_data(request.data, Book)
     book = request.get_json()
-    id = calibredb.set_metadata(id, None, book)
-    return response(200, jsonify(id=id))
+    calibredb.set_metadata(id, book, None)
+
+    book = calibredb.get_book(id)
+    return response(200, jsonify(books=book))
 
 
 @app.route("/books/<int:id>", methods=["DELETE"])
