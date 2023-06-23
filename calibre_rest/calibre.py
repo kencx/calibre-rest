@@ -365,11 +365,9 @@ class CalibreWrapper:
 
                 elif isinstance(value, list):
                     if flag == "authors":
-                        value = list(map(str.strip, value))
-                        value = " & ".join(value)
+                        value = join_list(value, " & ")
                     else:
-                        value = list(map(str.strip, value))
-                        value = ",".join(value)
+                        value = join_list(value, ",")
 
                 cmd += f" --{flag_name} {quote(str(value))}"
         return cmd
@@ -465,7 +463,6 @@ class CalibreWrapper:
         elif book is not None:
             self._handle_update_flags(cmd, book)
 
-        # TODO return id of updated book
         out, _ = self._run(cmd)
         return out
 
@@ -480,17 +477,15 @@ class CalibreWrapper:
                     for k, v in value.items():
                         identifier_str = f"{k}:{v}"
                         strs.append(identifier_str)
-                    cmd += f" --field {field}:{quote(','.join(strs))}"
+                    cmd += f" --field {field}:{quote(join_list(strs, ','))}"
                     break
 
                 elif isinstance(value, list):
                     if field == "authors":
                         # format: --field "authors:Foo Bar & Bar Baz"
-                        value = list(map(str.strip, value))
-                        value = " & ".join(value)
+                        value = join_list(value, " & ")
                     else:
-                        value = list(map(str.strip, value))
-                        value = ",".join(value)
+                        value = join_list(value, ",")
 
                 value = quote(f"{field}:{value}")
                 cmd += f" --field {value}"
@@ -502,6 +497,11 @@ class CalibreWrapper:
         ids (list[int]): List of book IDs
         """
         pass
+
+
+def join_list(lst: list, sep: str) -> str:
+    lst = list(map(str.strip, lst))
+    return sep.join(lst)
 
 
 def quote(s: str) -> str:
