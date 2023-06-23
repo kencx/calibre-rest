@@ -3,3 +3,4 @@ pip-tools
 isort
 black
 pytest
+pre-commit

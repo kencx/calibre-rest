@@ -1,5 +1,4 @@
-import inspect
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 
 from jsonschema import Draft202012Validator
 
