@@ -125,5 +125,6 @@ $ make test
 
 - [x] Support remote libraries
 - [ ] Pagination
+- [ ] TLS support
 - [ ] Feature parity with `calibredb`
 - [ ] S3 support
