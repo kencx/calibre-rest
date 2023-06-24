@@ -53,10 +53,6 @@ run:
 test:
 	pytest
 
-## build.base: build base Docker image
-base.build: docker/base.Dockerfile
-	docker build . -f docker/base.Dockerfile -t calibre_rest_base:latest
-
 %.build: docker/Dockerfile
 	docker build . -f $< -t ghcr.io/kencx/calibre_rest:$(version)-$* --target=$*
 

@@ -4,3 +4,4 @@ isort
 black
 pytest
 pre-commit
+requests
