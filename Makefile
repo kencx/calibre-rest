@@ -45,20 +45,20 @@ clean: check
 run.dev:
 	flask --app 'calibre_rest:create_app("dev")' run --debug
 
-## run: run gunicorn server
+## run: run Gunicorn server
 run:
-	gunicorn 'calibre_rest:create_app("prod")' -c gunicorn.py
+	python3 app.py
 
 ## test: run unit tests
 test:
-	pytest -v
+	pytest
 
 ## build.base: build base Docker image
 base.build: docker/base.Dockerfile
 	docker build . -f docker/base.Dockerfile -t calibre_rest_base:latest
 
 %.build: docker/%.Dockerfile base.build
-	docker build . -f $< -t calibre_rest:$(version)-$*
+	docker build . -f $< -t ghcr.io/kencx/calibre_rest:$(version)-$*
 
 ## build: build all Docker images
 build: app.build calibre.build

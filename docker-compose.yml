@@ -16,7 +16,7 @@ services:
       - 8000:80
     volumes:
       - "./library:/library"
-      - "./calibre-bin:/opt/calibre"
+      - "./calibre:/opt/calibre"
 
   calibre:
     container_name: calibre_rest_calibre

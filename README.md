@@ -91,15 +91,30 @@ $ python3 -m pip install -r requirements.txt
 $ wget -nv -O- https://download.calibre-ebook.com/linux-installer.sh | sudo sh /dev/stdin
 ```
 
-Start the server with env variables:
+## Usage
+
+Run the server with Docker:
 
 ```console
-$ export CALIBRE_REST_PATH=/opt/calibre/calibredb
-$ export CALIBRE_REST_LIBRARY=/path/to/library
-$ make run
+$ docker run \
+    -v "/opt/calibre:/opt/calibre" \
+    -v "./library:/library" \
+    -p 8080:80 \
+    -e "CALIBRE_REST_LIBRARY=/library" \
+    ghcr.io/kencx/calibre_rest:0.1.0-app
 ```
 
-## Usage
+or with docker-compose:
+
+```console
+$ docker compose up -d
+```
+
+or directly on your local machine:
+
+```console
+$ ./app.py
+```
 
 `calibre_rest` can access any local Calibre libraries or remote Calibre content
 server instances. For the latter, authentication must be enabled and configured.
@@ -107,6 +122,25 @@ For more information, refer to the [calibredb
 documentation](https://manual.calibre-ebook.com/generated/en/calibredb.html).
 
 See [API.md](API.md) for reference.
+
+### Configuration
+
+The server can be configured with the following environment variables.
+
+| Env Variable    | Description    | Type    | Default    |
+|---------------- | --------------- | --------------- | --------------- |
+| `CALIBRE_REST_PATH`    | Path to `calibredb` executable    | string | `/opt/calibre/calibredb` |
+| `CALIBRE_REST_LIBRARY` | Path to calibre library   | string   | `./library`   |
+| `CALIBRE_REST_USERNAME` | Calibre library username  | string  |  |
+| `CALIBRE_REST_PASSWORD` | Calibre library password   | string  |  |
+| `CALIBRE_REST_LOG_LEVEL` | Log Level | string  | `INFO`   |
+| `CALIBRE_REST_ADDR` | Server bind address | string   | `localhost:5000` |
+
+If running directly on your local machine, we can also use flags:
+
+```console
+$ ./app.py --bind localhost:5000
+```
 
 ## Development
 

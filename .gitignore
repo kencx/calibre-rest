@@ -8,6 +8,6 @@ instance/*
 .coverage
 testdata/*
 
-calibre-bin/*
+calibre/*
 library/*
 *.ini
