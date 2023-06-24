@@ -1,4 +1,4 @@
-.PHONY: help all base dev upgrade check clean run test build base.build
+.PHONY: help all base dev upgrade check clean run test build
 
 help:
 	@echo 'Usage:'
@@ -57,8 +57,8 @@ test:
 base.build: docker/base.Dockerfile
 	docker build . -f docker/base.Dockerfile -t calibre_rest_base:latest
 
-%.build: docker/%.Dockerfile base.build
-	docker build . -f $< -t ghcr.io/kencx/calibre_rest:$(version)-$*
+%.build: docker/Dockerfile
+	docker build . -f $< -t ghcr.io/kencx/calibre_rest:$(version)-$* --target=$*
 
 ## build: build all Docker images
 build: app.build calibre.build

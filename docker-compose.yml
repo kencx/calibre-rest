@@ -5,7 +5,8 @@ services:
     container_name: calibre_rest
     build:
       context: .
-      dockerfile: docker/app.Dockerfile
+      dockerfile: docker/Dockerfile
+      target: app
     image: ghcr.io/kencx/calibre_rest:0.1.0-app
     restart: unless-stopped
     environment:
@@ -22,7 +23,8 @@ services:
     container_name: calibre_rest_calibre
     build:
       context: .
-      dockerfile: docker/calibre.Dockerfile
+      dockerfile: docker/Dockerfile
+      target: calibre
     image: ghcr.io/kencx/calibre_rest:0.1.0-calibre
     restart: unless-stopped
     environment:

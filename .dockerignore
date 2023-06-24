@@ -19,5 +19,4 @@ testdata
 **/.pytest_cache
 
 library
-calibre-bin
-calibre-copy
+calibre

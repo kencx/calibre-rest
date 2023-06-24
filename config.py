@@ -6,7 +6,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 class Config:
     TESTING = False
     CALIBREDB_PATH = os.environ.get("CALIBRE_REST_PATH", "/opt/calibre/calibredb")
-    LIBRARY_PATH = os.environ.get("CALIBRE_REST_LIBRARY", "./library")
+    LIBRARY_PATH = os.environ.get("CALIBRE_REST_LIBRARY", "/library")
     CALIBREDB_USERNAME = os.environ.get("CALIBRE_REST_USERNAME", "")
     CALIBREDB_PASSWORD = os.environ.get("CALIBRE_REST_PASSWORD", "")
     LOG_LEVEL = os.environ.get("CALIBRE_REST_LOG_LEVEL", "INFO")
