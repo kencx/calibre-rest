@@ -4,9 +4,14 @@ import re
 import shlex
 import shutil
 import subprocess
+import threading
 from os import path
 
-from calibre_rest.errors import CalibreRuntimeError, ExistingItemError
+from calibre_rest.errors import (
+    CalibreConcurrencyError,
+    CalibreRuntimeError,
+    ExistingItemError,
+)
 from calibre_rest.models import Book
 
 
@@ -72,7 +77,15 @@ class CalibreWrapper:
         ".txt",
         ".txtz",
     )
-    AUTOMERGE_ENUM = ["overwrite", "new_record", "ignore"]
+    AUTOMERGE_VALID_VALUES = ["overwrite", "new_record", "ignore"]
+
+    CONCURRENCY_ERR_REGEX = re.compile(r"^Another calibre program.*is running.")
+    CALIBRE_VERSION_REGEX = re.compile(r"calibre ([\d.]+)")
+    BOOK_ADDED_REGEX = re.compile(r"^Added book ids: ([0-9,]+)")
+    BOOK_MERGED_REGEX = re.compile(r"^Merged book ids: ([0-9,]+)")
+    BOOK_IGNORED_REGEX = re.compile(
+        r"^The following books were not added as they already exist.*"
+    )
 
     def __init__(
         self,
@@ -80,7 +93,7 @@ class CalibreWrapper:
         lib: str,
         username: str = "",
         password: str = "",
-        logger=None,
+        logger: logging.Logger = None,
     ) -> None:
         """Initialize the calibredb command-line wrapper.
         To verify the executable and library paths, use check().
@@ -101,6 +114,10 @@ class CalibreWrapper:
 
         if username != "" and password != "":
             self.cdb_with_lib += f" --username {username} --password {password}"
+
+        # It is safer to limit calibredb to running one operation at any given
+        # time. More than one concurrent requests will result in calibre complaining.
+        self.mutex = threading.Lock()
 
     def check(self) -> None:
         """Check wrapper's executable and library exists. This is decoupled from
@@ -141,6 +158,8 @@ class CalibreWrapper:
 
         self.logger.debug(f'Running "{cmd}"')
         try:
+            self.mutex.acquire()
+
             process = subprocess.run(
                 shlex.split(cmd),
                 capture_output=True,
@@ -152,8 +171,16 @@ class CalibreWrapper:
             )
         except FileNotFoundError as err:
             raise FileNotFoundError(f"Executable could not be found.\n\n{err}") from err
+
         except subprocess.CalledProcessError as e:
-            raise CalibreRuntimeError(e.cmd, e.returncode, e.stdout, e.stderr)
+            match = re.search(self.CONCURRENCY_ERR_REGEX, e.stderr)
+            if match is not None:
+                raise CalibreConcurrencyError(e.cmd, e.returncode)
+            else:
+                raise CalibreRuntimeError(e.cmd, e.returncode, e.stdout, e.stderr)
+
+        finally:
+            self.mutex.release()
 
         if process.stderr:
             self.logger.warning(process.stderr)
@@ -166,7 +193,7 @@ class CalibreWrapper:
         cmd = f"{self.cdb} --version"
         out, _ = self._run(cmd)
 
-        match = re.search(re.compile(r"calibre ([\d.]+)"), out)
+        match = re.search(self.CALIBRE_VERSION_REGEX, out)
         if match is not None:
             return match.group(1)
         else:
@@ -254,7 +281,7 @@ class CalibreWrapper:
 
         cmd = f"{self.cdb_with_lib} add {book_path}"
 
-        if automerge in self.AUTOMERGE_ENUM:
+        if automerge in self.AUTOMERGE_VALID_VALUES:
             cmd += f" --automerge={automerge}"
         else:
             logging.warning(
@@ -297,13 +324,7 @@ class CalibreWrapper:
         cmd = self._handle_add_flags(cmd, book)
         out, stderr = self._run(cmd)
 
-        BOOK_ADDED_REGEX = re.compile(r"^Added book ids: ([0-9,]+)")
-        BOOK_MERGED_REGEX = re.compile(r"^Merged book ids: ([0-9,]+)")
-        BOOK_IGNORED_REGEX = re.compile(
-            r"^The following books were not added as they already exist.*"
-        )
-
-        book_ignored_match = re.search(BOOK_IGNORED_REGEX, stderr)
+        book_ignored_match = re.search(self.BOOK_IGNORED_REGEX, stderr)
         if book_ignored_match is not None:
             out = out.strip("\n ")
             logging.info(f"Books {out} already exist. Ignoring...")
@@ -311,7 +332,7 @@ class CalibreWrapper:
                 f"Book {out} already exists. Include automerge=overwrite to overwrite."
             )
 
-        book_merged_match = re.search(BOOK_MERGED_REGEX, out)
+        book_merged_match = re.search(self.BOOK_MERGED_REGEX, out)
         if book_merged_match is not None:
             logging.info("Books merged")
             book_ids_str = book_merged_match.group(1)
@@ -321,7 +342,7 @@ class CalibreWrapper:
             if len(book_ids) == 1:
                 return book_ids[0]
 
-        book_added_match = re.search(BOOK_ADDED_REGEX, out)
+        book_added_match = re.search(self.BOOK_ADDED_REGEX, out)
         if book_added_match is None:
             logging.warning(f'No books added after running "{cmd}"')
             raise Exception(

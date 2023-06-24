@@ -14,6 +14,12 @@ class CalibreRuntimeError(Exception):
         super().__init__(message)
 
 
+class CalibreConcurrencyError(CalibreRuntimeError):
+    def __init__(self, cmd: str, exit_code: int):
+        message = "Calibre is unable to handle more than one operation at once from calibredb."
+        super().__init__(cmd, exit_code, "", message)
+
+
 class InvalidPayloadError(HTTPException):
     """Raise when HTTP request payload is invalid or missing."""
 
