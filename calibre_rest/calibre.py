@@ -103,7 +103,6 @@ class CalibreWrapper:
         lib (str): Path to calibre library on the filesystem.
         logger (logging.Logger): Custom logger object
         """
-
         if logger is None:
             logger = logging.getLogger(__name__)
         self.logger = logger
@@ -124,11 +123,9 @@ class CalibreWrapper:
         the class' initialization to allow for easier testing.
 
         Raises:
-        FileNotFoundError: If the calibredb executable is not valid
-        FileNotFoundError: If the calibre metadata.db is not found in the given
-            library path
+        FileNotFoundError: If the calibredb executable is not valid or
+                           metadata.db is not found in the given library path
         """
-
         if not shutil.which(self.cdb):
             raise FileNotFoundError(f"{self.cdb} is not a valid executable")
 
@@ -154,8 +151,9 @@ class CalibreWrapper:
         Raises:
         FileNotFoundError: If the command's executable is invalid.
         CalibreRuntimeError: If the command returns a non-zero exit code.
+        CalibreConcurrencyError: If Calibre detects another Calibre program to
+                                 be running.
         """
-
         self.logger.debug(f'Running "{cmd}"')
         try:
             self.mutex.acquire()
@@ -208,7 +206,6 @@ class CalibreWrapper:
         Returns:
         Book: Book object
         """
-
         validate_id(id)
 
         cmd = (
@@ -275,7 +272,6 @@ class CalibreWrapper:
         Returns:
         int: Book ID of added book
         """
-
         if not path.exists(book_path):
             raise FileNotFoundError(f"Failed to find book at {book_path}")
 
@@ -301,7 +297,6 @@ class CalibreWrapper:
         Returns:
         int: Book ID of added book.
         """
-
         cmd = f"{self.cdb_with_lib} add --empty"
         return self._run_add(cmd, book)
 
@@ -401,7 +396,6 @@ class CalibreWrapper:
         ids (list[int]): List of book IDs to remove
         permanent (bool): Do not use the builtin trash can
         """
-
         if not all(i >= 0 for i in ids):
             raise ValueError(f"ids {ids} not allowed")
 
@@ -422,7 +416,6 @@ class CalibreWrapper:
         replace (bool): Replace file if format already exists in book
         data_file (bool):
         """
-
         validate_id(id)
 
         cmd = f"{self.cdb_with_lib} add_format {id}"
@@ -441,7 +434,6 @@ class CalibreWrapper:
         id (int): Book ID
         format (str): File extension like EPUB, TXT etc.
         """
-
         validate_id(id)
 
         # TODO check format
@@ -471,7 +463,6 @@ class CalibreWrapper:
         book (Book): Optional Book instance
         metadata_path (str): Path to OPF metadata file
         """
-
         validate_id(id)
 
         cmd = f"{self.cdb_with_lib} set_metadata {id}"
@@ -488,6 +479,21 @@ class CalibreWrapper:
         return out
 
     def _handle_update_flags(self, cmd: str, book: Book = None) -> str:
+        """Build flags for set_metadata
+
+        Args:
+        cmd (string): Command string to append flags to
+        book (Book): Optional book instance. All author values will be joined
+        with the " & " separator. All other list values will be joined with the
+        "," separator. All identifiers pairs will be turned into the form
+        "abc:123,foo:bar".
+
+        Returns:
+        string: Full command string with flags
+        """
+        if book is None:
+            return cmd
+
         for field in self.UPDATE_FLAGS:
             value = getattr(book, field)
 
