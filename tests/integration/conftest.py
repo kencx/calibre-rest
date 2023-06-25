@@ -1,10 +1,16 @@
 import os
+import shlex
+import subprocess
 import threading
 
 import pytest
 from werkzeug.serving import make_server
 
 from calibre_rest import create_app
+from config import TestConfig
+
+TEST_CALIBREDB_PATH = os.path.abspath(TestConfig.CALIBREDB_PATH)
+TEST_LIBRARY_PATH = os.path.abspath(TestConfig.LIBRARY_PATH)
 
 
 class MockServer:
@@ -23,10 +29,6 @@ class MockServer:
         self.app = create_app("test")
         self.server = make_server("localhost", port, app=self.app)
 
-        @self.app.route("/alive", methods=["GET"])
-        def alive():
-            return "True"
-
     def start(self):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -37,24 +39,47 @@ class MockServer:
 
 
 @pytest.fixture(scope="session")
-def setup():
-    """Setup test suite."""
-    server = MockServer()
-    prepare_testdata(library=server.app.config["LIBRARY_PATH"])
+def setup(prepare_test_library):
+    """Setup test suite and teardown after."""
 
+    server = MockServer()
     server.start()
     yield server
-
-    # cleanup()
     server.stop()
 
 
-def prepare_testdata(library):
-    """Prepare test data:
+@pytest.fixture(scope="session")
+def prepare_test_library(tmp_path_factory):
+    """Prepare test library and test data."""
 
-    * check metadata.db file in empty library
-    * test.txt file
-    * small.epub file
-    """
+    library = tmp_path_factory.mktemp("library")
+    out, err = calibredb_clone(TEST_LIBRARY_PATH, library)
+
     if not os.path.exists(os.path.join(library, "metadata.db")):
         raise FileNotFoundError("Library not initialized!")
+
+    test_file = os.path.join(TEST_LIBRARY_PATH, "test.txt")
+    if not os.path.exists(test_file):
+        with open(test_file, "w") as file:
+            file.write("hello world!")
+
+
+def calibredb_clone(library, new_library) -> (str, str):
+    """Clone calibre library."""
+
+    cmd = f"{TEST_CALIBREDB_PATH} --with-library {library} clone {new_library}"
+
+    try:
+        process = subprocess.run(
+            shlex.split(cmd),
+            capture_output=True,
+            check=True,
+            text=True,
+            encoding="utf-8",
+            env=None,
+            timeout=None,
+        )
+    except FileNotFoundError as err:
+        raise FileNotFoundError(f"Executable could not be found.\n\n{err}") from err
+
+    return process.stdout, process.stderr

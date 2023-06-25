@@ -1,4 +1,4 @@
-.PHONY: help all base dev upgrade check clean run test build
+.PHONY: help all base dev upgrade check clean run test unittest build
 
 help:
 	@echo 'Usage:'
@@ -49,9 +49,13 @@ run.dev:
 run:
 	python3 app.py
 
-## test: run unit tests
+## test: run all tests
 test:
 	pytest
+
+## test: run unit tests only
+unittest:
+	pytest --ignore=tests/integration
 
 %.build: docker/Dockerfile
 	docker build . -f $< -t ghcr.io/kencx/calibre_rest:$(version)-$* --target=$*

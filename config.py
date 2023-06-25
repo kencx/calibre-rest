@@ -20,7 +20,9 @@ class DevConfig(Config):
 class TestConfig(Config):
     TESTING = True
     CALIBREDB_PATH = os.environ.get("CALIBRE_REST_TEST_PATH", "./calibre/calibredb")
-    LIBRARY_PATH = os.environ.get("CALIBRE_REST_TEST_LIBRARY", "./library")
+    LIBRARY_PATH = os.environ.get(
+        "CALIBRE_REST_TEST_LIBRARY", "./tests/integration/testdata"
+    )
     BIND_ADDRESS = os.environ.get("CALIBRE_REST_ADDR", "0.0.0.0:5000")
 
 
