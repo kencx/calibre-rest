@@ -8,6 +8,7 @@ from flask import jsonify, make_response, request
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
+from calibre_rest import __version__
 from calibre_rest.errors import ExistingItemError, InvalidPayloadError
 from calibre_rest.models import Book
 
@@ -16,7 +17,10 @@ calibredb = app.config["CALIBREDB"]
 
 @app.route("/health")
 def version():
-    return response(200, jsonify(version=calibredb.version()))
+    return response(
+        200,
+        jsonify(calibre_version=calibredb.version(), calibre_rest_version=__version__),
+    )
 
 
 @app.route("/books/<int:id>")
