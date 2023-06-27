@@ -3,13 +3,68 @@
 import argparse
 
 from calibre_rest import GunicornApp, create_app
-from config import ProdConfig
+from config import DevConfig, ProdConfig
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Start Gunicorn server")
-    parser.add_argument("-b", "--bind", required=False, type=str, help="Bind address")
+    parser = argparse.ArgumentParser("Start calibre-rest server")
+    parser.add_argument(
+        "-d",
+        "--dev",
+        required=False,
+        action="store_true",
+        help="Run dev server",
+    )
+    parser.add_argument(
+        "-c",
+        "--calibre",
+        required=False,
+        type=str,
+        help="Path to calibre binary directory",
+    )
+    parser.add_argument(
+        "-l", "--library", required=False, type=str, help="Path to calibre library"
+    )
+    parser.add_argument(
+        "-u", "--username", required=False, type=str, help="Calibre library username"
+    )
+    parser.add_argument(
+        "-p", "--password", required=False, type=str, help="Calibre library password"
+    )
+    parser.add_argument(
+        "-g",
+        "--log-level",
+        default="INFO",
+        choices=DevConfig.LOG_LEVELS,
+        required=False,
+        type=str,
+        dest="log_level",
+        help="Log level",
+    )
+    parser.add_argument(
+        "-b", "--bind", required=False, type=str, help="Bind address HOST:PORT"
+    )
     args = parser.parse_args()
 
-    bind = args.bind or ProdConfig.BIND_ADDRESS
-    g = GunicornApp(create_app("prod"), bind=bind)
-    g.run()
+    if args.dev:
+        app_config = DevConfig(
+            calibredb=args.calibre,
+            library=args.library,
+            bind_addr=args.bind,
+            username=args.username,
+            password=args.password,
+            log_level=args.log_level,
+        )
+        app = create_app(app_config)
+        app.run()
+
+    else:
+        app_config = ProdConfig(
+            calibredb=args.calibre,
+            library=args.library,
+            bind_addr=args.bind,
+            username=args.username,
+            password=args.password,
+            log_level=args.log_level,
+        )
+        g = GunicornApp(app_config)
+        g.run()

@@ -12,7 +12,7 @@ from calibre_rest import __version__
 from calibre_rest.errors import ExistingItemError, InvalidPayloadError
 from calibre_rest.models import Book
 
-calibredb = app.config["CALIBREDB"]
+calibredb = app.config["CALIBRE_WRAPPER"]
 
 
 @app.route("/health")

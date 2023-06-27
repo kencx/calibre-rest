@@ -4,7 +4,7 @@ from flask import Flask
 from gunicorn.app.base import BaseApplication
 
 from calibre_rest.calibre import CalibreWrapper
-from config import config_map
+from config import DevConfig
 
 __version__ = "0.1.0"
 
@@ -34,9 +34,13 @@ class GunicornApp(BaseApplication):
         "access_log": "-",
     }
 
-    def __init__(self, app, **kwargs):
-        self.options = {**self.defaults, **kwargs}
-        self.app = app
+    def __init__(self, app_config):
+        self.app = create_app(app_config)
+        self.options = self.defaults
+
+        bind_addr = app_config.get("bind_addr")
+        if bind_addr is not None:
+            self.options["bind"] = bind_addr
         super().__init__()
 
     def load_config(self):
@@ -52,28 +56,39 @@ class GunicornApp(BaseApplication):
         return self.app
 
 
-def create_app(config_name="default"):
+def create_app(config=None):
     app = Flask(__name__)
 
-    cfg = app.config
-    cfg.from_object(config_map[config_name])
+    if config is None:
+        config = DevConfig()
 
-    # attach gunicorn handlers if exist
+    app.config.update(config.config())
+    app.testing = config.get("testing")
+    app.debug = config.get("debug")
+
+    # Only set for dev runs as it does not work well with
+    # Docker or reverse proxy
+    if isinstance(config, DevConfig):
+        app.config["SERVER_NAME"] = config.get("bind_addr")
+
+    # attach gunicorn log handlers if exist
     flog = app.logger
     gunicorn_handlers = logging.getLogger("gunicorn").handlers
     flog.handlers.extend(gunicorn_handlers)
-    flog.setLevel(cfg["LOG_LEVEL"])
+    flog.setLevel(app.config["log_level"])
+
+    app.logger.debug(f"Server config: {config.config()}")
 
     try:
         cdb = CalibreWrapper(
-            app.config["CALIBREDB_PATH"],
-            app.config["LIBRARY_PATH"],
-            app.config["CALIBREDB_USERNAME"],
-            app.config["CALIBREDB_PASSWORD"],
+            app.config["calibredb"],
+            app.config["library"],
+            app.config["username"],
+            app.config["password"],
             flog,
         )
         cdb.check()
-        cfg["CALIBREDB"] = cdb
+        app.config["CALIBRE_WRAPPER"] = cdb
     except FileNotFoundError as exc:
         # exit immediately if fail to initialize wrapper object
         raise SystemExit(exc)
@@ -82,8 +97,3 @@ def create_app(config_name="default"):
         import calibre_rest.routes  # noqa: F401
 
     return app
-
-
-if __name__ == "__main__":
-    app = create_app()
-    app.run()

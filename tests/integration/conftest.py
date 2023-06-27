@@ -1,7 +1,9 @@
 import os
+import re
 import shlex
 import subprocess
 import threading
+from urllib.parse import urlparse
 
 import pytest
 from werkzeug.serving import make_server
@@ -9,8 +11,11 @@ from werkzeug.serving import make_server
 from calibre_rest import create_app
 from config import TestConfig
 
-TEST_CALIBREDB_PATH = os.path.abspath(TestConfig.CALIBREDB_PATH)
-TEST_LIBRARY_PATH = os.path.abspath(TestConfig.LIBRARY_PATH)
+TEST_CALIBREDB_PATH = os.environ.get("CALIBRE_REST_TEST_PATH", "./calibre/calibredb")
+TEST_LIBRARY_PATH = os.environ.get(
+    "CALIBRE_REST_TEST_LIBRARY", "./tests/integration/testdata"
+)
+TEST_BIND_ADDR = os.environ.get("CALIBRE_REST_TEST_ADDR", "localhost:5000")
 
 
 class MockServer:
@@ -24,10 +29,21 @@ class MockServer:
     Source: https://gist.github.com/eruvanos/f6f62edb368a20aaa880e12976620db8
     """
 
-    def __init__(self, port=5000):
+    def __init__(self, library):
         self.thread = None
-        self.app = create_app("test")
-        self.server = make_server("localhost", port, app=self.app)
+
+        # urlparse only recognizes netloc if prepended with "//"
+        self.bind_addr = TEST_BIND_ADDR
+        if re.match(r"^https?://", self.bind_addr) is None:
+            self.bind_addr = "http://" + self.bind_addr
+
+        url = urlparse(self.bind_addr, scheme="http")
+        self.app = create_app(
+            TestConfig(
+                calibredb=TEST_CALIBREDB_PATH, library=library, bind_addr=url.netloc
+            )
+        )
+        self.server = make_server(url.hostname, url.port, app=self.app)
 
     def start(self):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -39,18 +55,8 @@ class MockServer:
 
 
 @pytest.fixture(scope="session")
-def setup(prepare_test_library):
+def setup(tmp_path_factory):
     """Setup test suite and teardown after."""
-
-    server = MockServer()
-    server.start()
-    yield server
-    server.stop()
-
-
-@pytest.fixture(scope="session")
-def prepare_test_library(tmp_path_factory):
-    """Prepare test library and test data."""
 
     library = tmp_path_factory.mktemp("library")
     out, err = calibredb_clone(TEST_LIBRARY_PATH, library)
@@ -62,6 +68,14 @@ def prepare_test_library(tmp_path_factory):
     if not os.path.exists(test_file):
         with open(test_file, "w") as file:
             file.write("hello world!")
+
+    # if not os.path.exists(TEST_LIBRARY_PATH / "foo.epub"):
+    #     raise FileNotFoundError("foo.epub not present!")
+
+    server = MockServer(library=library)
+    server.start()
+    yield server
+    server.stop()
 
 
 def calibredb_clone(library, new_library) -> (str, str):

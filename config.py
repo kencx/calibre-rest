@@ -1,38 +1,92 @@
+import logging
 import os
-
-basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 class Config:
-    TESTING = False
-    CALIBREDB_PATH = os.environ.get("CALIBRE_REST_PATH", "/opt/calibre/calibredb")
-    LIBRARY_PATH = os.environ.get("CALIBRE_REST_LIBRARY", "/library")
-    CALIBREDB_USERNAME = os.environ.get("CALIBRE_REST_USERNAME", "")
-    CALIBREDB_PASSWORD = os.environ.get("CALIBRE_REST_PASSWORD", "")
-    LOG_LEVEL = os.environ.get("CALIBRE_REST_LOG_LEVEL", "INFO")
-    BIND_ADDRESS = os.environ.get("CALIBRE_REST_ADDR", "localhost:5000")
+    LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"]
+
+    __config = {
+        "calibredb": os.environ.get("CALIBRE_REST_PATH", "/opt/calibre/calibredb"),
+        "library": os.environ.get("CALIBRE_REST_LIBRARY", "/library"),
+        "bind_addr": os.environ.get("CALIBRE_REST_ADDR", "localhost:5000"),
+        "username": os.environ.get("CALIBRE_REST_USERNAME", ""),
+        "password": os.environ.get("CALIBRE_REST_PASSWORD", ""),
+        "log_level": os.environ.get("CALIBRE_REST_LOG_LEVEL", "INFO"),
+        "debug": False,
+        "testing": False,
+    }
+    __setters = [
+        "calibredb",
+        "library",
+        "bind_addr",
+        "username",
+        "password",
+        "log_level",
+        "debug",
+        "testing",
+    ]
+
+    @staticmethod
+    def config():
+        return Config.__config
+
+    @staticmethod
+    def get(key):
+        return Config.__config[key]
+
+    @staticmethod
+    def set(key, value):
+        if key in Config.__setters:
+            if key == "log_level":
+                if value not in Config.LOG_LEVELS:
+                    logging.warning(
+                        f'Log level "{value}" not supported. Setting log level to "INFO"'
+                    )
+                    Config.__config[key] = "INFO"
+                    return
+
+            Config.__config[key] = value
+        else:
+            raise NameError(f'Key "{key}" not accepted in Config')
 
 
 class DevConfig(Config):
-    LOG_LEVEL = "DEBUG"
+    def __init__(
+        self,
+        calibredb=None,
+        library=None,
+        bind_addr=None,
+        username=None,
+        password=None,
+        log_level=None,
+    ):
+        for k, v in locals().items():
+            if v is not None and k != "self":
+                Config.set(k, v)
+
+        Config.set("log_level", os.environ.get("CALIBRE_REST_LOG_LEVEL", "DEBUG"))
+        Config.set("debug", True)
 
 
 class TestConfig(Config):
-    TESTING = True
-    CALIBREDB_PATH = os.environ.get("CALIBRE_REST_TEST_PATH", "./calibre/calibredb")
-    LIBRARY_PATH = os.environ.get(
-        "CALIBRE_REST_TEST_LIBRARY", "./tests/integration/testdata"
-    )
-    BIND_ADDRESS = os.environ.get("CALIBRE_REST_ADDR", "0.0.0.0:5000")
+    def __init__(self, calibredb=None, library=None, bind_addr=None):
+        for k, v in locals().items():
+            if v is not None and k != "self":
+                Config.set(k, v)
+
+        Config.set("testing", True)
 
 
 class ProdConfig(Config):
-    pass
-
-
-config_map = {
-    "dev": DevConfig,
-    "test": TestConfig,
-    "prod": ProdConfig,
-    "default": DevConfig,
-}
+    def __init__(
+        self,
+        calibredb=None,
+        library=None,
+        bind_addr=None,
+        username=None,
+        password=None,
+        log_level=None,
+    ):
+        for k, v in locals().items():
+            if v is not None and k != "self":
+                Config.set(k, v)

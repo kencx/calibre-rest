@@ -43,7 +43,7 @@ clean: check
 
 ## run.dev: run Flask debug server
 run.dev:
-	flask --app 'calibre_rest:create_app("dev")' run --debug
+	python3 app.py --dev
 
 ## run: run Gunicorn server
 run:
