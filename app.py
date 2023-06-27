@@ -2,7 +2,7 @@
 
 import argparse
 
-from calibre_rest import GunicornApp, create_app
+from calibre_rest import GunicornApp, __version__, create_app
 from config import DevConfig, ProdConfig
 
 if __name__ == "__main__":
@@ -12,7 +12,7 @@ if __name__ == "__main__":
         "--dev",
         required=False,
         action="store_true",
-        help="Run dev server",
+        help="Start in dev/debug mode",
     )
     parser.add_argument(
         "-c",
@@ -43,7 +43,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "-b", "--bind", required=False, type=str, help="Bind address HOST:PORT"
     )
+    parser.add_argument(
+        "-v", "--version", required=False, action="store_true", help="Print version"
+    )
     args = parser.parse_args()
+
+    if args.version:
+        print(__version__)
+        exit(0)
 
     if args.dev:
         app_config = DevConfig(

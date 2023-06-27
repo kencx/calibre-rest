@@ -12,7 +12,7 @@ use it at your own risk.
 - Contributions for testing and support on other OS platforms and Calibre versions
 are greatly welcome.
 
-calibre-rest is built with Flask and Gunicorn. See [API.md](#API.md) for
+calibre-rest is built with Flask and Gunicorn. See [API.md](API.md) for
 documentation on all API endpoints.
 
 ## Install
@@ -127,7 +127,20 @@ $ docker compose up -d app
 or directly on your local machine:
 
 ```console
-$ ./app.py
+$ python3 ./app.py -h
+
+usage: app.py [options]
+
+Options:
+  -h, --help         show this help message and exit
+  -d, --dev          Start in dev/debug mode
+  -c, --calibre      Path to calibre binary directory
+  -l, --library      Path to calibre library
+  -u, --username     Calibre library username
+  -p, --password     Calibre library password
+  -b, --bind         Bind address HOST:PORT
+  -g, --log-level    Log level
+  -v, --version      Print version
 ```
 
 calibre-rest can access any local Calibre libraries or remote [Calibre content
@@ -137,8 +150,6 @@ instances.
 For the latter, authentication must be enabled and configured.
 For more information, refer to the [calibredb
 documentation](https://manual.calibre-ebook.com/generated/en/calibredb.html).
-
-See [API.md](API.md) for reference.
 
 ### Configuration
 
