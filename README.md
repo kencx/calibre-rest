@@ -6,14 +6,37 @@ provide a simple REST API server for your [Calibre](https://calibre-ebook.com/)
 library.
 
 ### Disclaimer
+
 - calibre-rest is in pre-alpha and subject to bugs and breaking changes. Please
 use it at your own risk.
 - This project has been tested on `amd64` Linux systems with Calibre 6.21 only.
 - Contributions for testing and support on other OS platforms and Calibre versions
 are greatly welcome.
 
-calibre-rest is built with Flask and Gunicorn. See [API.md](API.md) for
-documentation on all API endpoints.
+## Overview
+
+calibre-rest is a self-hosted REST API server that wraps `calibredb` to expose a
+Calibre library. I wrote this project as I could not find a good
+language-agnostic method to programmatically manipulate a Calibre library
+(locally or remotely).
+
+```console
+# get metadata with book id
+$ curl localhost:5000/books/1
+
+# add ebook file to library
+$ curl -X POST -H "Content-Type:multipart/form-data" \
+    --form "file=@foo.epub" http://localhost:5000/books
+```
+
+See [API.md](API.md) for
+documentation of all API endpoints.
+
+calibre-rest is not meant to be a direct replacement for [Calibre Content
+Server](https://manual.calibre-ebook.com/server.html). It does not have any
+frontend interface and has no native access to a remote Calibre library without
+an existing `calibre-server` instance. It is best used as a alternative backend
+for any scripts or clients that wish to access the library remotely.
 
 ## Install
 
@@ -193,5 +216,6 @@ $ make test
 - [x] Support remote libraries
 - [ ] Pagination
 - [ ] TLS support
+- [ ] Authentication
 - [ ] Feature parity with `calibredb`
 - [ ] S3 support
