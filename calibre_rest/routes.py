@@ -9,7 +9,11 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 from calibre_rest import __version__
-from calibre_rest.errors import ExistingItemError, InvalidPayloadError
+from calibre_rest.errors import (
+    CalibreRuntimeError,
+    ExistingItemError,
+    InvalidPayloadError,
+)
 from calibre_rest.models import Book
 
 calibredb = app.config["CALIBRE_WRAPPER"]
@@ -58,6 +62,7 @@ def get_books():
     return response(200, jsonify(books=books))
 
 
+# TODO add multiple and with directory
 @app.route("/books", methods=["POST"])
 def add_book():
     """Add book to calibre library with book file and optional data.
@@ -70,10 +75,7 @@ def add_book():
         data: Optional JSON data
     """
 
-    if (
-        "multipart/form-data" not in request.content_type
-        and "application/json" not in request.content_type
-    ):
+    if "multipart/form-data" not in request.content_type:
         abort(415, "Only multipart/form-data and application/json allowed")
 
     if "file" not in request.files:
@@ -108,8 +110,11 @@ def add_book():
         data = json.loads(json_data)
         automerge = data.pop("automerge", "ignore")
         if len(data):
+            try:
+                book = Book(**data)
             # TODO catch TypeError from unrecognized keys
-            book = Book(**data)
+            except TypeError as exc:
+                raise ValueError(exc)
 
     id = calibredb.add_one(tempfilepath, book, automerge)
     return response(201, jsonify(added_id=id))
@@ -125,13 +130,14 @@ def add_empty_book():
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    book = {}
-    if request.data is not None:
+    book = Book()
+    if request.data != bytes():
         validate_data(request.data, Book)
         book = request.get_json()
+        book = Book(**book)
 
-    id = calibredb.add_one_empty(**book)
-    return response(201, jsonify(id=id))
+    id = calibredb.add_one_empty(book)
+    return response(201, jsonify(added_id=id))
 
 
 # TODO incomplete
@@ -206,6 +212,11 @@ def handle_value_error(e):
     return jsonify(error=str(e)), 422
 
 
+@app.errorhandler(CalibreRuntimeError)
+def handle_calibre_runtime_error(e):
+    return jsonify(error=str(e)), 500
+
+
 def response(status_code, data, headers={"Content-Type": "application/json"}):
     response = make_response(data, status_code)
 
@@ -224,7 +235,7 @@ def validate_data(data: str, cls):
     Raises:
     HTTPException: 422 error code when validation fails
     """
-    if data is None:
+    if data is None or data == bytes():
         app.logger.warning("No input data provided")
         return
 

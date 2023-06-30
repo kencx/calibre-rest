@@ -82,7 +82,7 @@ class CalibreWrapper:
     CONCURRENCY_ERR_REGEX = re.compile(r"^Another calibre program.*is running.")
     CALIBRE_VERSION_REGEX = re.compile(r"calibre ([\d.]+)")
     BOOK_ADDED_REGEX = re.compile(r"^Added book ids: ([0-9,]+)")
-    BOOK_MERGED_REGEX = re.compile(r"^Merged book ids: ([0-9,]+)")
+    BOOK_MERGED_REGEX = re.compile(r"^Merged book ids: ([0-9, ]+)")
     BOOK_IGNORED_REGEX = re.compile(
         r"^The following books were not added as they already exist.*"
     )
@@ -301,7 +301,25 @@ class CalibreWrapper:
         return self._run_add(cmd, book)
 
     def _run_add(self, cmd: str, book: Book = None) -> int:
-        """Run calibredb add subcommand for all add_* methods.
+        """Run calibredb add subcommand for all add_* methods. This parses the
+        result of the subcommand and determines the correct type of response to
+        give.
+
+         When an existing book is added, we can modify the behaviour with the
+         "automerge" flag:
+            - "automerge=ignore": Ignore the duplicate. This will not add any
+              new files and only the original remains. If the new book is given
+              different metadata through the any of the fields flags, a new
+              entry will be created, similar to "automerge=new_record".
+            - "automerge=overwrite": Overwrite the existing with the duplicate.
+              If the metadata is exactly the same, this will overwrite the
+              existing with the new file, resulting in only a single file. If
+              the new book is given different metadata through the any of the
+              fields flags, a new entry will be created, similar to
+              "automerge=new_record".
+            - "automerge=new_record" Create a new record entirely. This will
+              resulting in two different entries, regardless of their metadata
+              are similar.
 
         Args:
         cmd (str): Command string to run
@@ -331,7 +349,7 @@ class CalibreWrapper:
         if book_merged_match is not None:
             logging.info("Books merged")
             book_ids_str = book_merged_match.group(1)
-            book_ids = book_ids_str.split(",")
+            book_ids = book_ids_str.split(", ")
 
             # return merged book
             if len(book_ids) == 1:

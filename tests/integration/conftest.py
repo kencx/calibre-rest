@@ -55,7 +55,7 @@ class MockServer:
 
 
 @pytest.fixture(scope="session")
-def setup(tmp_path_factory):
+def setup(tmp_path_factory, autouse=True):
     """Setup test suite and teardown after."""
 
     library = tmp_path_factory.mktemp("library")
@@ -76,6 +76,11 @@ def setup(tmp_path_factory):
     server.start()
     yield server
     server.stop()
+
+
+@pytest.fixture()
+def url(setup):
+    return setup.bind_addr
 
 
 def calibredb_clone(library, new_library) -> (str, str):
