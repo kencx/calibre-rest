@@ -8,13 +8,42 @@ import requests
 from conftest import TEST_LIBRARY_PATH
 
 
+@pytest.fixture()
+def test_txt():
+    """Factory fixture for file payload.
+
+    Args:
+        filename (str): Filename for test.txt
+    """
+
+    def _test_txt(filename):
+        return {
+            "file": (
+                filename,
+                open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
+                "application/octet-stream",
+            )
+        }
+
+    return _test_txt
+
+
+@pytest.fixture()
+def seed_book(url, test_txt):
+    """Add book to database and delete on cleanup."""
+    id = post(f"{url}/books", HTTPStatus.CREATED, files=test_txt("test.txt"))
+    yield id
+    delete(url, id)
+
+
 def test_version(url):
     resp = requests.get(f"{url}/health")
     assert resp.status_code == HTTPStatus.OK
 
 
 def test_get_invalid_id(url):
-    get_error(
+    check_error(
+        "GET",
         f"{url}/books/0",
         HTTPStatus.UNPROCESSABLE_ENTITY,
         "cannot be <= 0",
@@ -22,7 +51,8 @@ def test_get_invalid_id(url):
 
 
 def test_get_404(url):
-    get_error(
+    check_error(
+        "GET",
         f"{url}/books/1000",
         HTTPStatus.NOT_FOUND,
         "does not exist",
@@ -30,18 +60,22 @@ def test_get_404(url):
 
 
 def test_delete_invalid_id(url):
-    resp = requests.delete(f"{url}/books/0")
-
-    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert "cannot be <= 0" in resp.json()["error"]
+    check_error(
+        "DELETE",
+        f"{url}/books/0",
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+        "cannot be <= 0",
+    )
 
 
 def test_add_empty_wrong_media_type(url):
-    headers = {"Content-Type": "application/xml"}
-    resp = requests.post(f"{url}/books/empty", headers=headers)
-
-    assert resp.status_code == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
-    assert "Only application/json allowed" in resp.json()["error"]
+    check_error(
+        "POST",
+        f"{url}/books/empty",
+        HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+        "Only application/json allowed",
+        headers={"Content-Type": "application/xml"},
+    )
 
 
 def test_add_empty_invalid_data(url):
@@ -69,34 +103,32 @@ def test_add_empty_invalid_data(url):
 )
 def test_add_empty_valid(url, payload, key, expected):
     headers = {"Content-Type": "application/json"}
-    post_resp = requests.post(f"{url}/books/empty", json=payload, headers=headers)
-
-    assert post_resp.status_code == HTTPStatus.CREATED
-
-    added_id = post_resp.json()["added_id"]
-    get_check(
+    id = post(f"{url}/books/empty", HTTPStatus.CREATED, json=payload, headers=headers)
+    get(
         url,
-        added_id,
+        id,
         HTTPStatus.OK,
         {key: expected},
     )
 
 
 def test_add_book_no_file(url):
-    headers = {"Content-Type": "multipart/form-data"}
-    resp = requests.post(f"{url}/books", headers=headers)
-
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
-    assert "No file provided" in resp.json()["error"]
+    check_error(
+        "POST",
+        f"{url}/books",
+        HTTPStatus.BAD_REQUEST,
+        "No file provided",
+        headers={"Content-Type": "multipart/form-data"},
+    )
 
 
 def test_add_book_wrong_media_type(url):
-    headers = {"Content-Type": "application/xml"}
-    resp = requests.post(f"{url}/books", headers=headers)
-
-    assert resp.status_code == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
-    assert (
-        "Only multipart/form-data and application/json allowed" in resp.json()["error"]
+    check_error(
+        "POST",
+        f"{url}/books",
+        HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+        "Only multipart/form-data allowed",
+        headers={"Content-Type": "application/xml"},
     )
 
 
@@ -105,62 +137,39 @@ def test_add_book_wrong_media_type(url):
     ("test.abc", "-test.txt"),
     ids=["extension", "hyphen"],
 )
-def test_add_book_invalid_filename(url, filename):
-    files = {
-        "file": (
-            filename,
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
-    post_resp = requests.post(f"{url}/books", files=files)
-
-    assert post_resp.status_code == HTTPStatus.BAD_REQUEST
-    assert "Invalid filename" in post_resp.json()["error"]
+def test_add_book_invalid_filename(url, test_txt, filename):
+    check_error(
+        "POST",
+        f"{url}/books",
+        HTTPStatus.BAD_REQUEST,
+        "Invalid filename",
+        files=test_txt(filename),
+    )
 
 
-def test_add_book_invalid_data(url):
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
+def test_add_book_invalid_data(url, test_txt):
     payload = {"title": 1}
     resp = requests.post(
-        f"{url}/books", files=files, data={"data": json.dumps(payload)}
+        f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
     )
 
     assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
 
 
-def test_add_book_invalid_key(url):
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
+def test_add_book_invalid_key(url, test_txt):
     payload = {"title": "foo", "random": "value"}
-    resp = requests.post(
-        f"{url}/books", files=files, data={"data": json.dumps(payload)}
+    check_error(
+        "POST",
+        f"{url}/books",
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+        "unexpected keyword argument 'random'",
+        data={"data": json.dumps(payload)},
+        files=test_txt("test.txt"),
     )
 
-    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert "unexpected keyword argument 'random'" in resp.json()["error"]
 
-
-def test_add_book_file_data(url):
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
+def test_add_book_file_data(url, test_txt):
     payload = {"title": "foo", "authors": ["John Doe"]}
 
     # The payload must be serialized into JSON and wrapped in a dict with the
@@ -168,14 +177,15 @@ def test_add_book_file_data(url):
     # key. The "json" argument cannot be used as it will attempt to set the
     # Content-Type as "application/json", causing Flask's request.form to be
     # empty.
-    post_resp = requests.post(
-        f"{url}/books", files=files, data={"data": json.dumps(payload)}
-    )
 
-    assert post_resp.status_code == HTTPStatus.CREATED
-    added_id = post_resp.json()["added_id"]
-    get_check(url, added_id, HTTPStatus.OK, {"title": "foo", "authors": "John Doe"})
-    delete_check(url, added_id)
+    added_id = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
+    )
+    get(url, added_id, HTTPStatus.OK, {"title": "foo", "authors": "John Doe"})
+    delete(url, added_id)
 
 
 @pytest.mark.parametrize(
@@ -186,170 +196,184 @@ def test_add_book_file_data(url):
     ),
     ids=["no payload", "explicit ignore"],
 )
-def test_add_book_existing_no_overwrite(url, payload):
-    """This tests that the existing book should not be overwritten and no new
+def test_add_book_existing_no_overwrite(url, payload, test_txt, seed_book):
+    """Tests that the existing book should not be overwritten and no new
     entries are created.
     """
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
-    post_resp = requests.post(
-        f"{url}/books", files=files, data={"data": json.dumps(payload)}
+    check_error(
+        "POST",
+        f"{url}/books",
+        HTTPStatus.CONFLICT,
+        "already exists",
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
     )
-    assert post_resp.status_code == HTTPStatus.CREATED
-    added_id = post_resp.json()["added_id"]
-
-    post_resp2 = requests.post(f"{url}/books", files=files)
-    assert post_resp2.status_code == HTTPStatus.CONFLICT
-    assert "already exists" in post_resp2.json()["error"]
-
-    delete_check(url, added_id)
 
 
-def test_add_book_existing_overwrite(url):
-    """This tests that the existing book should not be overwritten, but a new
+def test_add_book_existing_overwrite(url, test_txt, seed_book):
+    """Tests that the existing book should not be overwritten, but a new
     entry is created, even though automerge=ignore. This is because new metadata
     was added, causing a new entry to be created.
     """
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
+    added_id = seed_book
+
     payload = {"automerge": "ignore", "title": "foo"}
-
-    post_resp = requests.post(
-        f"{url}/books", files=files, data={"data": json.dumps(payload)}
+    added_id2 = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
     )
-    assert post_resp.status_code == HTTPStatus.CREATED
-    added_id = post_resp.json()["added_id"]
-
-    post_resp2 = requests.post(f"{url}/books", files=files)
-    assert post_resp2.status_code == HTTPStatus.CREATED
-    added_id2 = post_resp2.json()["added_id"]
     assert added_id != added_id2
 
-    delete_check(url, added_id)
-    delete_check(url, added_id2)
+    delete(url, added_id2)
 
 
-def test_add_book_existing_overwrite_merge(url):
-    """This tests that the newly added book is merged with the existing book
+def test_add_book_existing_overwrite_merge(url, test_txt, seed_book):
+    """Tests that the newly added book is merged with the existing book
     because automerge=overwrite is passed.
     """
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
+    added_id = seed_book
+
     payload = {"automerge": "overwrite"}
-
-    post_resp = requests.post(f"{url}/books", files=files)
-    assert post_resp.status_code == HTTPStatus.CREATED
-    added_id = post_resp.json()["added_id"]
-
-    post_resp2 = requests.post(
-        f"{url}/books", files=files, data={"data": json.dumps(payload)}
+    added_id2 = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
     )
-    assert post_resp2.status_code == HTTPStatus.CREATED
-    added_id2 = post_resp2.json()["added_id"]
     assert added_id2 == added_id
 
-    get_check(url, added_id, HTTPStatus.OK, {"title": "test"})
-    delete_check(url, added_id)
+    get(url, added_id, HTTPStatus.OK, {"title": "test"})
 
 
-def test_add_book_existing_overwrite_new(url):
-    """This tests that the newly added book is created as a new entry because
+def test_add_book_existing_overwrite_new(url, test_txt, seed_book):
+    """Tests that the newly added book is created as a new entry because
     additional metadata was added.
     """
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
+    added_id = seed_book
+
     payload = {"automerge": "overwrite", "title": "foo"}
-
-    post_resp = requests.post(f"{url}/books", files=files)
-    assert post_resp.status_code == HTTPStatus.CREATED
-    added_id = post_resp.json()["added_id"]
-
-    post_resp2 = requests.post(
-        f"{url}/books", files=files, data={"data": json.dumps(payload)}
+    added_id2 = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
     )
-    assert post_resp2.status_code == HTTPStatus.CREATED
-    added_id2 = post_resp2.json()["added_id"]
     assert added_id2 != added_id
 
-    get_check(url, added_id, HTTPStatus.OK, {"title": "test"})
-    get_check(url, added_id2, HTTPStatus.OK, {"title": "foo"})
-    delete_check(url, added_id)
-    delete_check(url, added_id2)
+    get(url, added_id, HTTPStatus.OK, {"title": "test"})
+    get(url, added_id2, HTTPStatus.OK, {"title": "foo"})
+    delete(url, added_id2)
 
 
-def test_add_book_existing_with_diff_name(url):
-    """This tests that adding the same file with a different name results in a
+def test_add_book_existing_with_diff_name(url, seed_book, test_txt):
+    """Tests that adding the same file with a different name results in a
     new entry.
     """
-    files = {
-        "file": (
-            "test.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
-
-    post_resp = requests.post(f"{url}/books", files=files)
-    assert post_resp.status_code == HTTPStatus.CREATED
-    added_id = post_resp.json()["added_id"]
+    added_id = seed_book
 
     # add the same file but with different name
-    files = {
-        "file": (
-            "test2.txt",
-            open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb"),
-            "application/octet-stream",
-        )
-    }
-
-    post_resp2 = requests.post(f"{url}/books", files=files)
-    assert post_resp2.status_code == HTTPStatus.CREATED
-    added_id2 = post_resp2.json()["added_id"]
-
+    added_id2 = post(f"{url}/books", HTTPStatus.CREATED, files=test_txt("test2.txt"))
     assert added_id != added_id2
 
-    get_check(url, added_id, HTTPStatus.OK, {})
-    get_check(url, added_id2, HTTPStatus.OK, {})
-    delete_check(url, added_id)
-    delete_check(url, added_id2)
+    get(url, added_id, HTTPStatus.OK)
+    get(url, added_id2, HTTPStatus.OK)
+    delete(url, added_id2)
 
 
-def get_error(url, code, err_message):
-    resp = requests.get(url)
-    assert resp.status_code == code
-    assert err_message in resp.json()["error"]
+def test_update_book_wrong_media_type(url):
+    headers = {"Content-Type": "application/xml"}
+    check_error(
+        "PUT",
+        f"{url}/books/1",
+        HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+        "Only application/json allowed",
+        headers=headers,
+    )
 
 
-def get_check(url: str, id: int | str, code: IntEnum, mappings: dict):
+def test_update_book_invalid_id(url):
+    check_error(
+        "PUT",
+        f"{url}/books/0",
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+        "cannot be <= 0",
+        json={"title": "foo"},
+    )
+
+
+def test_update_book_not_exist(url):
+    check_error(
+        "PUT",
+        f"{url}/books/1000",
+        HTTPStatus.NOT_FOUND,
+        "does not exist",
+        json={"title": "foo"},
+    )
+
+
+def test_update_book_no_data(url, seed_book):
+    id = seed_book
+    resp = requests.put(f"{url}/books/{id}", json={})
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+
+
+def test_update_book_invalid_data(url, seed_book):
+    id = seed_book
+    payload = {"title": 1}
+    resp = requests.put(f"{url}/books/{id}", json=payload)
+
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
+
+
+def test_update_book_invalid_key(url, seed_book):
+    id = seed_book
+
+    payload = {"title": "foo", "random": "value"}
+    check_error(
+        "POST",
+        f"{url}/books/{id}",
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+        "unexpected keyword argument 'random'",
+        json={payload},
+    )
+
+
+def test_update_book(url):
+    pass
+
+
+def get(url: str, id: int | str, code: IntEnum, mappings: dict = None):
     resp = requests.get(f"{url}/books/{id}")
     assert resp.status_code == code
 
     data = resp.json()
     assert data["books"]["id"] == int(id)
-    for k, v in mappings.items():
-        assert data["books"][k] == v
+    if mappings is not None:
+        for k, v in mappings.items():
+            assert data["books"][k] == v
 
 
-def delete_check(url: str, id: int):
+def post(url: str, code: IntEnum, **kwargs):
+    resp = requests.post(url, **kwargs)
+    assert resp.status_code == code
+    return resp.json()["id"]
+
+
+def put(url: str, id: int, code: IntEnum, **kwargs):
+    resp = requests.put(f"{url}/books/{id}", **kwargs)
+    assert resp.status_code == code
+    return resp.json()["id"]
+
+
+def delete(url: str, id: int):
     resp = requests.delete(f"{url}/books/{id}")
     assert resp.status_code == HTTPStatus.OK
+
+
+def check_error(method: str, url: str, code: IntEnum, err_message: str, **kwargs):
+    resp = requests.request(method, url, **kwargs)
+    assert resp.status_code == code
+    assert err_message in resp.json()["error"]

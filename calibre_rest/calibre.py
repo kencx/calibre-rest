@@ -483,6 +483,10 @@ class CalibreWrapper:
         """
         validate_id(id)
 
+        # check if book exists
+        if self.get_book(id) is None:
+            return
+
         cmd = f"{self.cdb_with_lib} set_metadata {id}"
 
         if metadata_path:

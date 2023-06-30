@@ -76,7 +76,7 @@ def add_book():
     """
 
     if "multipart/form-data" not in request.content_type:
-        abort(415, "Only multipart/form-data and application/json allowed")
+        abort(415, "Only multipart/form-data allowed")
 
     if "file" not in request.files:
         raise InvalidPayloadError("No file provided")
@@ -117,7 +117,7 @@ def add_book():
                 raise ValueError(exc)
 
     id = calibredb.add_one(tempfilepath, book, automerge)
-    return response(201, jsonify(added_id=id))
+    return response(201, jsonify(id=id))
 
 
 @app.route("/books/empty", methods=["POST"])
@@ -137,7 +137,7 @@ def add_empty_book():
         book = Book(**book)
 
     id = calibredb.add_one_empty(book)
-    return response(201, jsonify(added_id=id))
+    return response(201, jsonify(id=id))
 
 
 # TODO incomplete
@@ -151,12 +151,19 @@ def update_book(id):
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    if request.data is None:
+    print(request.get_json())
+    print(request.data)
+
+    if request.get_json() == {}:
         abort(400)
 
     validate_data(request.data, Book)
     book = request.get_json()
-    calibredb.set_metadata(id, book, None)
+    book = Book(**book)
+    book = calibredb.set_metadata(id, book, None)
+
+    if book is None:
+        abort(404, f"book {id} does not exist")
 
     book = calibredb.get_book(id)
     return response(200, jsonify(books=book))

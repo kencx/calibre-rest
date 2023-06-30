@@ -80,6 +80,7 @@ def setup(tmp_path_factory, autouse=True):
 
 @pytest.fixture()
 def url(setup):
+    """Return server URL"""
     return setup.bind_addr
 
 
