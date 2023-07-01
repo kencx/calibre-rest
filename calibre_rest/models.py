@@ -58,12 +58,10 @@ class Book:
             "author_sort": {"type": "string"},
             "comments": {"type": "string"},
             "cover": {"type": "string"},
-            "formats": {"type": "array", "items": {"type": "string"}},
             "id": {"type": "integer", "minimum": 0},
             "identifiers": {"type": "object"},
             "isbn": {"type": "string"},
             "languages": {"type": "array", "items": {"type": "string"}},
-            "last_modified": {"type": "string"},
             "pubdate": {"type": "string"},
             "publisher": {"type": "string"},
             "rating": {"type": "number"},
@@ -71,18 +69,21 @@ class Book:
             "series_index": {"type": "number", "minimum": 0.0},
             "size": {"type": "number"},
             "tags": {"type": "array", "items": {"type": "string"}},
-            "template": {"type": "string"},
             "timestamp": {"type": "string"},
             "title": {"type": "string"},
-            "uuid": {"type": "string"},
+            # not class property
+            "automerge": {
+                "type": "string",
+                "enum": ["ignore", "overwrite", "new_record"],
+            },
         },
+        "additionalProperties": False,
     }
     v = Draft202012Validator(SCHEMA)
 
     @classmethod
     def validate(self, instance):
         # TODO valid identifiers object must be dict(str, str)
-        # TODO handle redundant data fields
         return sorted(self.v.iter_errors(instance), key=str)
 
 

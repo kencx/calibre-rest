@@ -65,15 +65,7 @@ def get_books():
 # TODO add multiple and with directory
 @app.route("/books", methods=["POST"])
 def add_book():
-    """Add book to calibre library with book file and optional data.
-
-    method: POST
-    headers:
-        Content-Type: enctype=multipart/form-data
-    data:
-        file: /path/to/file
-        data: Optional JSON data
-    """
+    """Add book to calibre library with book file and optional data."""
 
     if "multipart/form-data" not in request.content_type:
         abort(415, "Only multipart/form-data allowed")
@@ -96,25 +88,21 @@ def add_book():
     if not path.isfile(tempfilepath):
         raise FileNotFoundError(f"{tempfilepath} not found.")
 
+    book = Book()
+
     # Check if optional input data exists in form field "data".
     # If exists, check for "automerge" key to modify automerge behaviour.
     # If any book field keys are present, add them to the book dict.
 
     json_data = request.form.get("data")
-    validate_data(json_data, Book)
-
-    book = Book()
+    validate(json_data, Book)
     automerge = "ignore"
 
     if json_data is not None:
         data = json.loads(json_data)
         automerge = data.pop("automerge", "ignore")
         if len(data):
-            try:
-                book = Book(**data)
-            # TODO catch TypeError from unrecognized keys
-            except TypeError as exc:
-                raise ValueError(exc)
+            book = Book(**data)
 
     id = calibredb.add_one(tempfilepath, book, automerge)
     return response(201, jsonify(id=id))
@@ -122,17 +110,14 @@ def add_book():
 
 @app.route("/books/empty", methods=["POST"])
 def add_empty_book():
-    """method: POST
-    headers:
-        Content-Type: application/json
-    """
+    """Add empty book to calibre library with optional data."""
 
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
     book = Book()
     if request.data != bytes():
-        validate_data(request.data, Book)
+        validate(request.data, Book)
         book = request.get_json()
         book = Book(**book)
 
@@ -140,38 +125,31 @@ def add_empty_book():
     return response(201, jsonify(id=id))
 
 
-# TODO incomplete
 @app.route("/books/<int:id>", methods=["PUT"])
 def update_book(id):
-    """method: POST
-    headers:
-        Content-Type: application/json
-    """
+    """Update existing book in calibre library with JSON data."""
 
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    print(request.get_json())
-    print(request.data)
-
     if request.get_json() == {}:
         abort(400)
 
-    validate_data(request.data, Book)
+    validate(request.data, Book)
     book = request.get_json()
     book = Book(**book)
-    book = calibredb.set_metadata(id, book, None)
+    returned_id = calibredb.set_metadata(id, book, None)
 
-    if book is None:
+    if returned_id == -1:
         abort(404, f"book {id} does not exist")
 
-    book = calibredb.get_book(id)
+    book = calibredb.get_book(returned_id)
     return response(200, jsonify(books=book))
 
 
 @app.route("/books/<int:id>", methods=["DELETE"])
 def delete_book(id):
-    # calibredb remove does not return any useful output
+    """Remove existing book in calibre library."""
     calibredb.remove([id])
 
     # check if book still exists
@@ -216,7 +194,7 @@ def handle_timeout_error(e):
 
 @app.errorhandler(ValueError)
 def handle_value_error(e):
-    return jsonify(error=str(e)), 422
+    return jsonify(error=str(e)), 400
 
 
 @app.errorhandler(CalibreRuntimeError)
@@ -233,14 +211,14 @@ def response(status_code, data, headers={"Content-Type": "application/json"}):
     return response
 
 
-def validate_data(data: str, cls):
+def validate(data: str, cls):
     """Validate JSON string with Book.
 
     Args:
     data (str): JSON string.
 
     Raises:
-    HTTPException: 422 error code when validation fails
+    HTTPException: 400 error code when validation fails
     """
     if data is None or data == bytes():
         app.logger.warning("No input data provided")
@@ -249,12 +227,13 @@ def validate_data(data: str, cls):
     json_data = json.loads(data)
     errors = cls.validate(json_data)
     if len(errors):
-        abort(
-            response(
-                422,
-                jsonify({"errors": [{e.path.popleft(): e.message} for e in errors]}),
-            ),
-        )
+        data = {"errors": []}
+        for e in errors:
+            if len(e.path):
+                data["errors"].append({e.path.popleft(): e.message})
+            else:
+                data["errors"].append({"key": e.message})
+        abort(response(400, jsonify(data)))
 
 
 def allowed_file(filename: str) -> bool:

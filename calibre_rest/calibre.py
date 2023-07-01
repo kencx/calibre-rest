@@ -485,7 +485,7 @@ class CalibreWrapper:
 
         # check if book exists
         if self.get_book(id) is None:
-            return
+            return -1
 
         cmd = f"{self.cdb_with_lib} set_metadata {id}"
 
@@ -495,10 +495,13 @@ class CalibreWrapper:
             cmd += f" {metadata_path}"
 
         elif book is not None:
-            self._handle_update_flags(cmd, book)
+            cmd = self._handle_update_flags(cmd, book)
+        else:
+            raise ValueError("No metadata given for update")
 
-        out, _ = self._run(cmd)
-        return out
+        # Difficult to check for error. Best way is for user to check entry.
+        self._run(cmd)
+        return id
 
     def _handle_update_flags(self, cmd: str, book: Book = None) -> str:
         """Build flags for set_metadata

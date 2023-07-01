@@ -45,7 +45,7 @@ def test_get_invalid_id(url):
     check_error(
         "GET",
         f"{url}/books/0",
-        HTTPStatus.UNPROCESSABLE_ENTITY,
+        HTTPStatus.BAD_REQUEST,
         "cannot be <= 0",
     )
 
@@ -63,7 +63,7 @@ def test_delete_invalid_id(url):
     check_error(
         "DELETE",
         f"{url}/books/0",
-        HTTPStatus.UNPROCESSABLE_ENTITY,
+        HTTPStatus.BAD_REQUEST,
         "cannot be <= 0",
     )
 
@@ -83,7 +83,7 @@ def test_add_empty_invalid_data(url):
     payload = {"title": 1}
     resp = requests.post(f"{url}/books/empty", json=payload, headers=headers)
 
-    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
 
 
@@ -153,29 +153,40 @@ def test_add_book_invalid_data(url, test_txt):
         f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
     )
 
-    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
 
 
 def test_add_book_invalid_key(url, test_txt):
     payload = {"title": "foo", "random": "value"}
-    check_error(
-        "POST",
-        f"{url}/books",
-        HTTPStatus.UNPROCESSABLE_ENTITY,
-        "unexpected keyword argument 'random'",
-        data={"data": json.dumps(payload)},
-        files=test_txt("test.txt"),
+    resp = requests.post(
+        f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
     )
+
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert "'random' was unexpected" in resp.json()["errors"][0]["key"]
+
+
+def test_add_book_invalid_data_multiple(url, test_txt):
+    payload = {"title": 1, "series_index": "string", "random": "value"}
+    resp = requests.post(
+        f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
+    )
+    errors = resp.json()["errors"]
+
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert "'string' is not of type 'number'" in errors[0]["series_index"]
+    assert "1 is not of type 'string'" in errors[1]["title"]
+    assert "'random' was unexpected" in errors[2]["key"]
 
 
 def test_add_book_file_data(url, test_txt):
     payload = {"title": "foo", "authors": ["John Doe"]}
 
-    # The payload must be serialized into JSON and wrapped in a dict with the
-    # "data" key. This allows Flask to access it as form data with the correct
-    # key. The "json" argument cannot be used as it will attempt to set the
-    # Content-Type as "application/json", causing Flask's request.form to be
+    # The client's payload must be serialized into JSON and wrapped in a dict
+    # with the "data" key. This allows Flask to access it as form data with the
+    # correct key. The "json" argument cannot be used as it will attempt to set
+    # the Content-Type as "application/json", causing Flask's request.form to be
     # empty.
 
     added_id = post(
@@ -297,7 +308,7 @@ def test_update_book_invalid_id(url):
     check_error(
         "PUT",
         f"{url}/books/0",
-        HTTPStatus.UNPROCESSABLE_ENTITY,
+        HTTPStatus.BAD_REQUEST,
         "cannot be <= 0",
         json={"title": "foo"},
     )
@@ -324,7 +335,7 @@ def test_update_book_invalid_data(url, seed_book):
     payload = {"title": 1}
     resp = requests.put(f"{url}/books/{id}", json=payload)
 
-    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
 
 
@@ -332,17 +343,21 @@ def test_update_book_invalid_key(url, seed_book):
     id = seed_book
 
     payload = {"title": "foo", "random": "value"}
-    check_error(
-        "POST",
-        f"{url}/books/{id}",
-        HTTPStatus.UNPROCESSABLE_ENTITY,
-        "unexpected keyword argument 'random'",
-        json={payload},
-    )
+    resp = requests.put(f"{url}/books/{id}", json=payload)
+
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert "'random' was unexpected" in resp.json()["errors"][0]["key"]
 
 
-def test_update_book(url):
-    pass
+def test_update_book_valid_data(url, seed_book):
+    id = seed_book
+
+    payload = {"title": "new title", "tags": ["foo", "bar"]}
+    book = put(url, id, HTTPStatus.OK, json=payload)
+
+    assert book["id"] == int(id)
+    assert book["title"] == "new title"
+    assert book["tags"] == ["foo", "bar"]
 
 
 def get(url: str, id: int | str, code: IntEnum, mappings: dict = None):
@@ -365,7 +380,7 @@ def post(url: str, code: IntEnum, **kwargs):
 def put(url: str, id: int, code: IntEnum, **kwargs):
     resp = requests.put(f"{url}/books/{id}", **kwargs)
     assert resp.status_code == code
-    return resp.json()["id"]
+    return resp.json()["books"]
 
 
 def delete(url: str, id: int):
