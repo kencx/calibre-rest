@@ -29,6 +29,8 @@ def version():
 
 @app.route("/books/<int:id>")
 def get_book(id):
+    """Get book from calibre library."""
+
     book = calibredb.get_book(id)
     if not book:
         abort(404, f"book {id} does not exist")
@@ -122,9 +124,10 @@ def add_empty_book():
         book = request.get_json()
 
     validate(request.data, Book)
+    automerge = book.pop("automerge", "ignore")
     book = Book(**book)
 
-    id = calibredb.add_one_empty(book)
+    id = calibredb.add_one_empty(book, automerge)
     return response(201, jsonify(id=id))
 
 
@@ -153,6 +156,7 @@ def update_book(id):
 @app.route("/books/<int:id>", methods=["DELETE"])
 def delete_book(id):
     """Remove existing book in calibre library."""
+
     calibredb.remove([id])
 
     # check if book still exists

@@ -96,12 +96,15 @@ class CalibreWrapper:
         logger: logging.Logger = None,
     ) -> None:
         """Initialize the calibredb command-line wrapper.
+
         To verify the executable and library paths, use check().
 
         Args:
-        calibredb (str): Path to calibredb executable.
-        lib (str): Path to calibre library on the filesystem.
-        logger (logging.Logger): Custom logger object
+            calibredb (str): Path to calibredb executable.
+            lib (str): Path to calibre library on the filesystem.
+            username (str): calibre server username
+            password (str): calibre server password
+            logger (logging.Logger): Custom logger object
         """
         if logger is None:
             logger = logging.getLogger(__name__)
@@ -115,16 +118,18 @@ class CalibreWrapper:
             self.cdb_with_lib += f" --username {username} --password {password}"
 
         # It is safer to limit calibredb to running one operation at any given
-        # time. More than one concurrent requests will result in calibre complaining.
+        # time. Any concurrent requests will result in calibre complaining.
         self.mutex = threading.Lock()
 
     def check(self) -> None:
-        """Check wrapper's executable and library exists. This is decoupled from
-        the class' initialization to allow for easier testing.
+        """Check that wrapper's executable and library exists.
+
+        This is decoupled from the class' initialization to allow for easier
+        testing.
 
         Raises:
-        FileNotFoundError: If the calibredb executable is not valid or
-                           metadata.db is not found in the given library path
+            FileNotFoundError: If the calibredb executable is not valid or
+                metadata.db is not found in the given library path
         """
         if not shutil.which(self.cdb):
             raise FileNotFoundError(f"{self.cdb} is not a valid executable")
@@ -141,18 +146,18 @@ class CalibreWrapper:
         a warning.
 
         Args:
-        cmd (str): Full command string to execute. This string will be split
-            appropriately with shlex.split.
+            cmd (str): Full command string to execute. This string will be split
+                appropriately with shlex.split.
 
         Returns:
-        str: Stdout of command
-        str: Stderr of command
+            str: Stdout of command
+            str: Stderr of command
 
         Raises:
-        FileNotFoundError: If the command's executable is invalid.
-        CalibreRuntimeError: If the command returns a non-zero exit code.
-        CalibreConcurrencyError: If Calibre detects another Calibre program to
-                                 be running.
+            FileNotFoundError: The command's executable is invalid.
+            CalibreRuntimeError: The command returns a non-zero exit code.
+            CalibreConcurrencyError: Calibre detects another Calibre program to
+                be running.
         """
         self.logger.debug(f'Running "{cmd}"')
         try:
@@ -186,7 +191,11 @@ class CalibreWrapper:
         return process.stdout, process.stderr
 
     def version(self) -> str:
-        """Get calibredb version."""
+        """Get calibredb version.
+
+        Returns:
+            str: calibredb version
+        """
 
         cmd = f"{self.cdb} --version"
         out, _ = self._run(cmd)
@@ -201,10 +210,10 @@ class CalibreWrapper:
         """Get book from calibre database.
 
         Args:
-        id (int): Book ID
+            id (int): Book ID
 
         Returns:
-        Book: Book object
+            Book: Book object
         """
         validate_id(id)
 
@@ -224,7 +233,8 @@ class CalibreWrapper:
             return
 
         # "calibredb list" returns a list, regardless of the limit or number of
-        # results.
+        # results. This command should return only 1 element, but we check just
+        # in case.
         if len(b) == 1:
             return Book(**b[0])
 
@@ -233,10 +243,10 @@ class CalibreWrapper:
         """Get list of books from calibre database.
 
         Args:
-        limit (int): Limit on total number of results
+            limit (int): Limit on total number of results
 
         Returns:
-        list[Book]: List of books
+            list[Book]: List of books
         """
         if limit <= 0:
             raise ValueError(f"limit {limit} not allowed")
@@ -257,36 +267,82 @@ class CalibreWrapper:
 
     def add_one(
         self, book_path: str, book: Book = None, automerge: str = "ignore"
-    ) -> int:
+    ) -> list[int]:
         """Add a single book to calibre database.
 
         Args:
-        book_path (str): Filepath to book on the filesystem. Filenames cannot
-        begin with a hyphen.
-        book (Book): Optional book instance
-        automerge (str): Accepts one of the following:
-            - "automerge=ignore": Ignore the duplicate. This will not add any
-              new files and only the original remains. If the new book is given
-              different metadata through the any of the fields flags, a new
-              entry will be created, similar to "automerge=new_record".
-            - "automerge=overwrite": Overwrite the existing with the duplicate.
-              If the metadata is exactly the same, this will overwrite the
-              existing with the new file, resulting in only a single file. If
-              the new book is given different metadata through the any of the
-              fields flags, a new entry will be created, similar to
-              "automerge=new_record".
-            - "automerge=new_record" Create a new record entirely. This will
-              resulting in two different entries, regardless of their metadata
-              are similar.
+            book_path (str): Book file path to upload. A list of supported file
+                extensions is given by self.ALLOWED_FILE_EXTENSIONS. Filenames
+                cannot begin with a hyphen.
+            book (Book): Optional book instance with additional metadata.
+            automerge (str): Modifies the behaviour of calibredb when a book is
+            found to already exist in the library. Accepts one of the following:
+                - ignore (default): Ignore the duplicate and return a 409 Conflict
+                error. This will not add any new records or files.
+                - overwrite: Overwrite the existing file with the new file, leaving
+                only a single record.
+                - new_record Create a new record entirely. This will result in two
+                different records.
+
+            If the same file is uploaded with different JSON metadata, a new
+            record will be created, regardless of the value given to
+            `automerge`.
+
+            If the same file exists across multiple different entries in the
+            same library, as a result of using `automerge=new_record`, and we
+            add another instance of the same file with `automerge=overwrite`,
+            the new file would overwrite ALL existing entries with the same file
+            in the library.
 
         Returns:
-        int: Book ID of added book
+            list[int]: List of IDs of added/merged book(s). While this function
+                serves to add only one book, there are instances when multiple book
+                IDs can be returned when the added book is merged with multiple
+                existing books.
         """
         if not path.exists(book_path):
             raise FileNotFoundError(f"Failed to find book at {book_path}")
 
         cmd = f"{self.cdb_with_lib} add {book_path}"
 
+        return self._run_add(cmd, book, automerge)
+
+    def add_one_empty(self, book: Book = None, automerge: str = "ignore") -> list[int]:
+        """Add one empty book (with no formats) to the calibredb database.
+
+        Args:
+            book (Book): Optional book instance.
+            automerge (str): Defaults to "ignore".
+
+        Returns:
+            list[int]: List of IDs of added/merged book(s). While this function
+                serves to add only one book, there are instances when multiple book
+                IDs can be returned when the added book is merged with multiple
+                existing books.
+        """
+        cmd = f"{self.cdb_with_lib} add --empty"
+        return self._run_add(cmd, book, automerge)
+
+    def _run_add(
+        self, cmd: str, book: Book = None, automerge: str = "ignore"
+    ) -> list[int]:
+        """Run calibredb add subcommand for all add_* methods.
+
+        This parses the result of the subcommand and determines the correct type
+        of response to return.
+
+        Args:
+            cmd (str): Command string to run.
+            book (Book): Optional book instance with metadata.
+            automerge (str): Defaults to "ignore".
+
+        Returns:
+            list[int]: List of IDs of added/merged books.
+
+        Raises:
+            ExistingItemError: Book to be added already exists.
+            Exception: Unforeseen error when adding book.
+        """
         if automerge in self.AUTOMERGE_VALID_VALUES:
             cmd += f" --automerge={automerge}"
         else:
@@ -296,38 +352,6 @@ class CalibreWrapper:
             )
             cmd += " --automerge=ignore"
 
-        return self._run_add(cmd, book)
-
-    def add_one_empty(self, book: Book = None) -> int:
-        """Add one empty book (with no formats) to the calibredb database.
-
-        Args:
-        book (Book): Optional book instance
-
-        Returns:
-        int: Book ID of added book.
-        """
-        cmd = f"{self.cdb_with_lib} add --empty"
-        return self._run_add(cmd, book)
-
-    def _run_add(self, cmd: str, book: Book = None) -> int:
-        """Run calibredb add subcommand for all add_* methods. This parses the
-        result of the subcommand and determines the correct type of response to
-        give.
-
-        Args:
-        cmd (str): Command string to run
-        book (Book): Optional book instance
-
-        Returns:
-        int: Book ID of added book.
-
-        Raises:
-        ExistingItemError: If books to be added already exists and
-        automerge="ignore".
-        Exception: If books added that were not ignored or merged, due to
-        unforeseen error.
-        """
         cmd = self._handle_add_flags(cmd, book)
         out, stderr = self._run(cmd)
 
@@ -373,18 +397,18 @@ class CalibreWrapper:
         self.logger.error(f"COMMAND: {cmd}\n\nSTDOUT:\n{out}\nSTDERR:\n{stderr}")
         raise Exception("Could not parse calibredb add output, something went wrong...")
 
-    def _handle_add_flags(self, cmd: str, book: Book = None):
+    def _handle_add_flags(self, cmd: str, book: Book = None) -> str:
         """Build flags for add_* methods.
 
         Args:
-        cmd (string): Command string to append flags to
-        book (Book): Optional book instance. All author values will be joined
-        with the " & " separator. All other list values will be joined with the
-        "," separator. All identifiers pairs will be turned into the form
-        "abc:123,foo:bar".
+            cmd (string): Original command string.
+            book (Book): Optional book instance. All author values will be joined
+                with the " & " separator. All other list values will be joined with the
+                "," separator. All identifiers pairs will be turned into the form
+                "abc:123,foo:bar".
 
         Returns:
-        string: Full command string with flags
+            string: Full command string with flags.
         """
         if book is None:
             return cmd
@@ -412,11 +436,16 @@ class CalibreWrapper:
 
     def remove(self, ids: list[int], permanent: bool = False) -> str:
         """Remove book from calibre database.
-        Fails silently  with no output if given IDs do not exist.
+
+        Fails silently with no output if given IDs do not exist.
 
         Args:
-        ids (list[int]): List of book IDs to remove
-        permanent (bool): Do not use the builtin trash can
+            ids (list[int]): List of book IDs to remove
+            permanent (bool): Delete permanently, i.e. do not use the builtin
+                trash can
+
+        Returns:
+            str: Stdout of command, which is usually empty.
         """
         if not all(i >= 0 for i in ids):
             raise ValueError(f"ids {ids} not allowed")
@@ -434,9 +463,9 @@ class CalibreWrapper:
         """Add a book format to an existing book in the calibre database.
 
         Args:
-        id (int): Book ID
-        replace (bool): Replace file if format already exists in book
-        data_file (bool):
+            id (int): Book ID
+            replace (bool): Replace file if format already exists in book
+            data_file (bool):
         """
         validate_id(id)
 
@@ -453,8 +482,8 @@ class CalibreWrapper:
         """Remove book format from an existing book with given ID.
 
         Args:
-        id (int): Book ID
-        format (str): File extension like EPUB, TXT etc.
+            id (int): Book ID
+            format (str): File extension like EPUB, TXT etc.
         """
         validate_id(id)
 
@@ -467,7 +496,7 @@ class CalibreWrapper:
         """Returns XML metadata of given in calibre database.
 
         Args:
-        id (int): Book ID
+            id (int): Book ID
         """
         validate_id(id)
 
@@ -477,13 +506,19 @@ class CalibreWrapper:
 
     def set_metadata(
         self, id: int, book: Book = None, metadata_path: str = None
-    ) -> str:
+    ) -> int:
         """Set XML metadata of book with OPF file or kwargs.
 
         Args:
-        id (int): Book ID
-        book (Book): Optional Book instance
-        metadata_path (str): Path to OPF metadata file
+            id (int): Book ID
+            book (Book): Optional Book instance
+            metadata_path (str): Path to OPF metadata file
+
+        Returns:
+            int: ID of updated book. If -1, book does not exist.
+
+        Raises:
+            ValueError: No data given to update book.
         """
         validate_id(id)
 
@@ -508,17 +543,17 @@ class CalibreWrapper:
         return id
 
     def _handle_update_flags(self, cmd: str, book: Book = None) -> str:
-        """Build flags for set_metadata
+        """Build flags for set_metadata.
 
         Args:
-        cmd (string): Command string to append flags to
-        book (Book): Optional book instance. All author values will be joined
-        with the " & " separator. All other list values will be joined with the
-        "," separator. All identifiers pairs will be turned into the form
-        "abc:123,foo:bar".
+            cmd (string): Original command string.
+            book (Book): Optional book instance. All author values will be joined
+                with the " & " separator. All other list values will be joined with the
+                "," separator. All identifiers pairs will be turned into the form
+                "abc:123,foo:bar".
 
         Returns:
-        string: Full command string with flags
+            str: Full command string with flags
         """
         if book is None:
             return cmd
@@ -550,7 +585,8 @@ class CalibreWrapper:
     def export(self, ids: list[int]) -> str:
         """Export books from calibre database to filesystem
 
-        ids (list[int]): List of book IDs
+        Args:
+            ids (list[int]): List of book IDs
         """
         pass
 
