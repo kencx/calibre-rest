@@ -341,27 +341,37 @@ class CalibreWrapper:
 
         book_merged_match = re.search(self.BOOK_MERGED_REGEX, out)
         if book_merged_match is not None:
-            logging.info("Books merged")
             book_ids_str = book_merged_match.group(1)
             book_ids = book_ids_str.split(", ")
 
-            # return merged book
-            if len(book_ids) == 1:
-                return book_ids[0]
+            if len(book_ids) < 1:
+                self.logger.error("No books were merged, something went wrong...")
+                self.logger.error(
+                    f"COMMAND: {cmd}\n\nSTDOUT:\n{out}\nSTDERR:\n{stderr}"
+                )
+                raise Exception("No books were merged, something went wrong...")
+            else:
+                return book_ids
 
         book_added_match = re.search(self.BOOK_ADDED_REGEX, out)
-        if book_added_match is None:
-            logging.warning(f'No books added after running "{cmd}"')
-            raise Exception(
-                "No books were added because something went wrong. Please look at logs to troubleshoot."
-            )
+        if book_added_match is not None:
+            book_ids_str = book_added_match.group(1)
+            book_ids = book_ids_str.split(", ")
 
-        book_ids_str = book_added_match.group(1)
-        book_ids = book_ids_str.split(",")
+            if len(book_ids) < 1:
+                self.logger.error("No books were added, something went wrong...")
+                self.logger.error(
+                    f"COMMAND: {cmd}\n\nSTDOUT:\n{out}\nSTDERR:\n{stderr}"
+                )
+                raise Exception("No books were added, something went wrong...")
+            else:
+                return book_ids
 
-        # should add only one book
-        if len(book_ids) == 1:
-            return book_ids[0]
+        self.logger.error(
+            "Could not parse calibredb add output, something went wrong..."
+        )
+        self.logger.error(f"COMMAND: {cmd}\n\nSTDOUT:\n{out}\nSTDERR:\n{stderr}")
+        raise Exception("Could not parse calibredb add output, something went wrong...")
 
     def _handle_add_flags(self, cmd: str, book: Book = None):
         """Build flags for add_* methods.

@@ -115,9 +115,11 @@ def add_empty_book():
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    book = request.get_json()
-    if book == dict():
-        abort(400, "No data provided")
+    # allow empty request data
+    if request.get_data() == bytes():
+        book = {}
+    else:
+        book = request.get_json()
 
     validate(request.data, Book)
     book = Book(**book)

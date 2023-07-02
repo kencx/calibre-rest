@@ -30,10 +30,10 @@ def test_txt():
 
 @pytest.fixture()
 def seed_book(url, test_txt):
-    """Add book to database and delete on cleanup."""
+    """Add one book to database and delete on cleanup."""
     id = post(f"{url}/books", HTTPStatus.CREATED, files=test_txt("test.txt"))
-    yield id
-    delete(url, id)
+    yield id[0]
+    delete(url, id[0])
 
 
 def test_version(url):
@@ -99,16 +99,6 @@ def test_add_empty_wrong_media_type(url):
     )
 
 
-def test_add_empty_no_data(url):
-    check_error(
-        "POST",
-        f"{url}/books/empty",
-        HTTPStatus.BAD_REQUEST,
-        "No data provided",
-        headers={"Content-Type": "application/json"},
-    )
-
-
 def test_add_empty_invalid_data(url):
     headers = {"Content-Type": "application/json"}
     payload = {"title": 1}
@@ -116,6 +106,17 @@ def test_add_empty_invalid_data(url):
 
     assert resp.status_code == HTTPStatus.BAD_REQUEST
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
+
+
+def test_add_empty_no_data(url):
+    headers = {"Content-Type": "application/json"}
+    id = post(f"{url}/books/empty", HTTPStatus.CREATED, headers=headers)[0]
+    get(
+        url,
+        id,
+        HTTPStatus.OK,
+        {"title": "Unknown"},
+    )
 
 
 @pytest.mark.parametrize(
@@ -134,7 +135,12 @@ def test_add_empty_invalid_data(url):
 )
 def test_add_empty_valid(url, payload, key, expected):
     headers = {"Content-Type": "application/json"}
-    id = post(f"{url}/books/empty", HTTPStatus.CREATED, json=payload, headers=headers)
+    id = post(
+        f"{url}/books/empty",
+        HTTPStatus.CREATED,
+        json=payload,
+        headers=headers,
+    )[0]
     get(
         url,
         id,
@@ -224,7 +230,7 @@ def test_add_book_file_data(url, test_txt):
         HTTPStatus.CREATED,
         files=test_txt("test.txt"),
         data={"data": json.dumps(payload)},
-    )
+    )[0]
     get(url, added_id, HTTPStatus.OK, {"title": "foo", "authors": "John Doe"})
     delete(url, added_id)
 
@@ -277,7 +283,7 @@ def test_add_book_ignore_new(url, test_txt, seed_book):
         HTTPStatus.CREATED,
         files=test_txt("test.txt"),
         data={"data": json.dumps(payload)},
-    )
+    )[0]
     assert added_id != added_id2
 
     delete(url, added_id2)
@@ -295,7 +301,7 @@ def test_add_book_automerge_overwrite(url, test_txt, seed_book):
         HTTPStatus.CREATED,
         files=test_txt("test.txt"),
         data={"data": json.dumps(payload)},
-    )
+    )[0]
     assert added_id2 == added_id
 
     get(url, added_id, HTTPStatus.OK, {"title": "test"})
@@ -314,7 +320,7 @@ def test_add_book_overwrite_new(url, test_txt, seed_book):
         HTTPStatus.CREATED,
         files=test_txt("test.txt"),
         data={"data": json.dumps(payload)},
-    )
+    )[0]
     assert added_id2 != added_id
 
     get(url, added_id, HTTPStatus.OK, {"title": "test"})
@@ -334,11 +340,40 @@ def test_add_book_new_record(url, test_txt, seed_book):
         HTTPStatus.CREATED,
         files=test_txt("test.txt"),
         data={"data": json.dumps(payload)},
-    )
+    )[0]
     assert added_id2 != added_id
 
     get(url, added_id, HTTPStatus.OK, {"title": "test"})
     get(url, added_id2, HTTPStatus.OK, {"title": "test"})
+    delete(url, added_id2)
+
+
+def test_add_book_overwrite_multiple(url, test_txt, seed_book):
+    """Tests that when multiple entries of the same book exist in the library,
+    trying to add another with automerge=overwrite will overwrite all entries.
+    """
+    added_id = seed_book
+
+    payload = {"automerge": "new_record"}
+    added_id2 = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
+    )[0]
+    assert added_id2 != added_id
+
+    payload = {"automerge": "overwrite"}
+    added_id3 = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
+    )
+    assert len(added_id3) == 2
+    assert added_id2 in added_id3
+    assert added_id in added_id3
+
     delete(url, added_id2)
 
 
@@ -349,7 +384,7 @@ def test_add_book_existing_with_diff_name(url, seed_book, test_txt):
     added_id = seed_book
 
     # add the same file but with different name
-    added_id2 = post(f"{url}/books", HTTPStatus.CREATED, files=test_txt("test2.txt"))
+    added_id2 = post(f"{url}/books", HTTPStatus.CREATED, files=test_txt("test2.txt"))[0]
     assert added_id != added_id2
 
     get(url, added_id, HTTPStatus.OK)
