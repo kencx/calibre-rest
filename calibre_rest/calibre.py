@@ -265,9 +265,19 @@ class CalibreWrapper:
         begin with a hyphen.
         book (Book): Optional book instance
         automerge (str): Accepts one of the following:
-            ignore: Duplicate formats are discarded (default)
-            overwrite: Duplicate formats are overwritten with newly added files
-            new_record: Duplicate formats are placed into new book record
+            - "automerge=ignore": Ignore the duplicate. This will not add any
+              new files and only the original remains. If the new book is given
+              different metadata through the any of the fields flags, a new
+              entry will be created, similar to "automerge=new_record".
+            - "automerge=overwrite": Overwrite the existing with the duplicate.
+              If the metadata is exactly the same, this will overwrite the
+              existing with the new file, resulting in only a single file. If
+              the new book is given different metadata through the any of the
+              fields flags, a new entry will be created, similar to
+              "automerge=new_record".
+            - "automerge=new_record" Create a new record entirely. This will
+              resulting in two different entries, regardless of their metadata
+              are similar.
 
         Returns:
         int: Book ID of added book
@@ -304,22 +314,6 @@ class CalibreWrapper:
         """Run calibredb add subcommand for all add_* methods. This parses the
         result of the subcommand and determines the correct type of response to
         give.
-
-         When an existing book is added, we can modify the behaviour with the
-         "automerge" flag:
-            - "automerge=ignore": Ignore the duplicate. This will not add any
-              new files and only the original remains. If the new book is given
-              different metadata through the any of the fields flags, a new
-              entry will be created, similar to "automerge=new_record".
-            - "automerge=overwrite": Overwrite the existing with the duplicate.
-              If the metadata is exactly the same, this will overwrite the
-              existing with the new file, resulting in only a single file. If
-              the new book is given different metadata through the any of the
-              fields flags, a new entry will be created, similar to
-              "automerge=new_record".
-            - "automerge=new_record" Create a new record entirely. This will
-              resulting in two different entries, regardless of their metadata
-              are similar.
 
         Args:
         cmd (str): Command string to run

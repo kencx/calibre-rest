@@ -115,11 +115,12 @@ def add_empty_book():
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    book = Book()
-    if request.data != bytes():
-        validate(request.data, Book)
-        book = request.get_json()
-        book = Book(**book)
+    book = request.get_json()
+    if book == dict():
+        abort(400, "No data provided")
+
+    validate(request.data, Book)
+    book = Book(**book)
 
     id = calibredb.add_one_empty(book)
     return response(201, jsonify(id=id))
@@ -132,14 +133,14 @@ def update_book(id):
     if request.content_type != "application/json":
         abort(415, "Only application/json allowed")
 
-    if request.get_json() == {}:
-        abort(400)
+    book = request.get_json()
+    if book == dict():
+        abort(400, "No data provided")
 
     validate(request.data, Book)
-    book = request.get_json()
     book = Book(**book)
-    returned_id = calibredb.set_metadata(id, book, None)
 
+    returned_id = calibredb.set_metadata(id, book, None)
     if returned_id == -1:
         abort(404, f"book {id} does not exist")
 

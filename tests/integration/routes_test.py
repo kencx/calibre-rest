@@ -59,12 +59,33 @@ def test_get_404(url):
     )
 
 
+def test_get_book(url, seed_book):
+    id = seed_book
+    get(
+        url,
+        id,
+        HTTPStatus.OK,
+        {"title": "test", "authors": "Unknown", "id": int(id)},
+    )
+
+
 def test_delete_invalid_id(url):
     check_error(
         "DELETE",
         f"{url}/books/0",
         HTTPStatus.BAD_REQUEST,
         "cannot be <= 0",
+    )
+
+
+def test_delete(url, seed_book):
+    id = seed_book
+    delete(url, id)
+    check_error(
+        "GET",
+        f"{url}/books/{id}",
+        HTTPStatus.NOT_FOUND,
+        "does not exist",
     )
 
 
@@ -75,6 +96,16 @@ def test_add_empty_wrong_media_type(url):
         HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
         "Only application/json allowed",
         headers={"Content-Type": "application/xml"},
+    )
+
+
+def test_add_empty_no_data(url):
+    check_error(
+        "POST",
+        f"{url}/books/empty",
+        HTTPStatus.BAD_REQUEST,
+        "No data provided",
+        headers={"Content-Type": "application/json"},
     )
 
 
@@ -181,14 +212,13 @@ def test_add_book_invalid_data_multiple(url, test_txt):
 
 
 def test_add_book_file_data(url, test_txt):
-    payload = {"title": "foo", "authors": ["John Doe"]}
-
     # The client's payload must be serialized into JSON and wrapped in a dict
     # with the "data" key. This allows Flask to access it as form data with the
     # correct key. The "json" argument cannot be used as it will attempt to set
     # the Content-Type as "application/json", causing Flask's request.form to be
     # empty.
 
+    payload = {"title": "foo", "authors": ["John Doe"]}
     added_id = post(
         f"{url}/books",
         HTTPStatus.CREATED,
@@ -199,6 +229,19 @@ def test_add_book_file_data(url, test_txt):
     delete(url, added_id)
 
 
+def test_add_book_automerge_invalid_value(url, test_txt):
+    payload = {"automerge": "invalid value"}
+    resp = requests.post(
+        f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
+    )
+
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert (
+        "'invalid value' is not one of ['ignore', 'overwrite', 'new_record']"
+        in resp.json()["errors"][0]["automerge"]
+    )
+
+
 @pytest.mark.parametrize(
     "payload",
     (
@@ -207,7 +250,7 @@ def test_add_book_file_data(url, test_txt):
     ),
     ids=["no payload", "explicit ignore"],
 )
-def test_add_book_existing_no_overwrite(url, payload, test_txt, seed_book):
+def test_add_book_automerge_ignore(url, payload, test_txt, seed_book):
     """Tests that the existing book should not be overwritten and no new
     entries are created.
     """
@@ -221,8 +264,8 @@ def test_add_book_existing_no_overwrite(url, payload, test_txt, seed_book):
     )
 
 
-def test_add_book_existing_overwrite(url, test_txt, seed_book):
-    """Tests that the existing book should not be overwritten, but a new
+def test_add_book_ignore_new(url, test_txt, seed_book):
+    """Tests that the new book should not be ignored, but a new
     entry is created, even though automerge=ignore. This is because new metadata
     was added, causing a new entry to be created.
     """
@@ -240,7 +283,7 @@ def test_add_book_existing_overwrite(url, test_txt, seed_book):
     delete(url, added_id2)
 
 
-def test_add_book_existing_overwrite_merge(url, test_txt, seed_book):
+def test_add_book_automerge_overwrite(url, test_txt, seed_book):
     """Tests that the newly added book is merged with the existing book
     because automerge=overwrite is passed.
     """
@@ -258,9 +301,10 @@ def test_add_book_existing_overwrite_merge(url, test_txt, seed_book):
     get(url, added_id, HTTPStatus.OK, {"title": "test"})
 
 
-def test_add_book_existing_overwrite_new(url, test_txt, seed_book):
-    """Tests that the newly added book is created as a new entry because
-    additional metadata was added.
+def test_add_book_overwrite_new(url, test_txt, seed_book):
+    """Tests that the new book should not be overwrite the existing, but a new
+    entry is created, even though automerge=overwrite. This is because new metadata
+    was added, causing a new entry to be created.
     """
     added_id = seed_book
 
@@ -275,6 +319,26 @@ def test_add_book_existing_overwrite_new(url, test_txt, seed_book):
 
     get(url, added_id, HTTPStatus.OK, {"title": "test"})
     get(url, added_id2, HTTPStatus.OK, {"title": "foo"})
+    delete(url, added_id2)
+
+
+def test_add_book_new_record(url, test_txt, seed_book):
+    """Tests that the existing book is created as a new entry because
+    automerge=new_record was passed.
+    """
+    added_id = seed_book
+
+    payload = {"automerge": "new_record"}
+    added_id2 = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=test_txt("test.txt"),
+        data={"data": json.dumps(payload)},
+    )
+    assert added_id2 != added_id
+
+    get(url, added_id, HTTPStatus.OK, {"title": "test"})
+    get(url, added_id2, HTTPStatus.OK, {"title": "test"})
     delete(url, added_id2)
 
 
@@ -326,8 +390,13 @@ def test_update_book_not_exist(url):
 
 def test_update_book_no_data(url, seed_book):
     id = seed_book
-    resp = requests.put(f"{url}/books/{id}", json={})
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    check_error(
+        "PUT",
+        f"{url}/books/{id}",
+        HTTPStatus.BAD_REQUEST,
+        "No data provided",
+        json={},
+    )
 
 
 def test_update_book_invalid_data(url, seed_book):
