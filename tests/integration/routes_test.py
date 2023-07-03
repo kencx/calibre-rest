@@ -122,16 +122,21 @@ def test_add_empty_no_data(url):
 @pytest.mark.parametrize(
     "payload, key, expected",
     (
-        ({"title": "foo"}, "title", "foo"),
-        ({}, "title", "Unknown"),
-        ({"tags": ["foo", "bar"]}, "tags", ["foo", "bar"]),
-        (
+        pytest.param({"title": "foo"}, "title", "foo", id="simple"),
+        pytest.param({}, "title", "Unknown", id="no data"),
+        pytest.param(
+            {"tags": ["foo", "bar"]},
+            "tags",
+            ["foo", "bar"],
+            id="list",
+        ),
+        pytest.param(
             {"identifiers": {"foo": "abcd", "bar": "1234"}},
             "identifiers",
             {"foo": "abcd", "bar": "1234"},
+            id="identifiers",
         ),
     ),
-    ids=["simple", "no data", "list", "identifiers"],
 )
 def test_add_empty_valid(url, payload, key, expected):
     headers = {"Content-Type": "application/json"}
@@ -171,8 +176,10 @@ def test_add_book_wrong_media_type(url):
 
 @pytest.mark.parametrize(
     "filename",
-    ("test.abc", "-test.txt"),
-    ids=["extension", "hyphen"],
+    (
+        pytest.param("test.abc", id="invalid extension"),
+        pytest.param("-test.txt", id="leading hyphen"),
+    ),
 )
 def test_add_book_invalid_filename(url, test_txt, filename):
     check_error(
@@ -251,10 +258,9 @@ def test_add_book_automerge_invalid_value(url, test_txt):
 @pytest.mark.parametrize(
     "payload",
     (
-        {},
-        {"automerge": "ignore"},
+        pytest.param({}, id="no payload"),
+        pytest.param({"automerge": "ignore"}, id="explicit ignore"),
     ),
-    ids=["no payload", "explicit ignore"],
 )
 def test_add_book_automerge_ignore(url, payload, test_txt, seed_book):
     """Tests that the existing book should not be overwritten and no new
