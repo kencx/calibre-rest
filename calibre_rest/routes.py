@@ -14,7 +14,7 @@ from calibre_rest.errors import (
     ExistingItemError,
     InvalidPayloadError,
 )
-from calibre_rest.models import Book
+from calibre_rest.models import Book, PaginatedResults
 
 calibredb = app.config["CALIBRE_WRAPPER"]
 
@@ -43,24 +43,38 @@ def get_books():
     """Get list of books.
 
     Query Parameters:
-    limit: Maximum number of results in a page
-    before_id: Results before id
-    after_id: Results after id
-    sort: Sort results by field
-    search: Search results
+        start: Start index
+        limit: Maximum number of results in a page
+        sort: Sort results by field
+        search: Search results with Calibre's search interface
     """
 
-    per_page = request.args.get("per_page")
+    start = request.args.get("start") or 1
+    limit = request.args.get("limit") or 500
+    sort = request.args.getlist("sort") or None
+    search = request.args.getlist("search") or None
 
-    if per_page:
-        books = calibredb.get_books(limit=int(per_page))
-    else:
-        books = calibredb.get_books()
+    # Currently, calibredb fetches all books with the query and we perform the
+    # pagination on the results after. This means all results are fetched for
+    # every page query with no caching. This seems extremely wasteful, and the
+    # ideal way should be to perform pagination during the query, but calibredb
+    # does not support any form of offset or cursor based pagination of its
+    # results.
 
+    # Naively, we set a hard limit on the maximum number of results calibredb
+    # can fetch in one query, but there would no way to access the results that
+    # come after the limit with the same query.
+
+    books = calibredb.get_books(int(limit), sort, search)
     if not len(books):
         return response(204, jsonify(books=[]))
 
-    return response(200, jsonify(books=books))
+    try:
+        res = PaginatedResults(books, int(start), int(limit), sort, search)
+    except Exception as exc:
+        abort(400, exc)
+
+    return response(200, jsonify(res.todict()))
 
 
 # TODO add multiple and with directory

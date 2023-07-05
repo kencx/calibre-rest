@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from jsonschema import Draft202012Validator
 
@@ -88,58 +89,82 @@ class Book:
 
 
 class PaginatedResults:
-    """
+    """Paginate list of books with offset and limit.
+
     Fields:
-    books (list[Book]): List of books
-
-    {
-        "books": [...]
-        "metadata": {
-            "total_count": 200
-            "limit": 10
-            "self": "/books?limit=10&after_id=0"
-            "prev": ""
-            "next": "/books?limit=10&after_id=10"
-        }
-    }
+        books (list[Book]): Full list of books
+        start (int): Start index
+        limit (int): Number of books per page
+        sort (list[str]): List of sort keys
+        search (list[str]): List of search terms
     """
 
-    def __init__(self, books: list[Book], total_count: int, limit: int):
+    def __init__(
+        self,
+        books: list[Book],
+        start: int,
+        limit: int,
+        sort: list[str] = None,
+        search: list[str] = None,
+    ):
+        self.base_url = urlsplit("/books")
         self.books = books
-        self.total_count = total_count
+        self.start = start
         self.limit = limit
-        self.before_id = -1
-        self.after_id = 0
+        self.sort = sort
+        self.search = search
+
+        if len(books) < self.start:
+            raise Exception(
+                f"start {self.start} is larger than number of books ({len(books)})"
+            )
+        self.count = len(books)
+
+    def build_query(self, start: int):
+        params = {"start": start, "limit": self.limit}
+
+        if self.sort is not None:
+            params["sort"] = self.sort
+
+        if self.search is not None:
+            params["search"] = self.search
+
+        query = urlencode(params, doseq=True)
+        return urlunsplit(self.base_url._replace(query=query))
 
     def current_page(self):
-        pass
+        return self.build_query(self.start)
 
     def prev_page(self):
         if not self.has_prev_page():
             return ""
 
-        return f"/books?limit={self.limit}&before_id={self.after_id - self.limit}"
+        prev_start = max(1, self.start - self.limit)
+        return self.build_query(prev_start)
 
     def next_page(self):
         if not self.has_next_page():
             return ""
 
-        return f"/books?limit={self.limit}&after_id={self.limit + self.after_id}"
+        return self.build_query(self.start + self.limit)
 
     def has_prev_page(self):
-        return self.before_id < 0
+        return not (self.start == 1)
 
     def has_next_page(self):
-        return not (self.limit + self.after_id > self.total_count)
+        return not (self.start + self.limit > self.count)
 
     def todict(self):
         return {
-            "books": self.books,
+            "books": self.books[
+                (self.start - 1) : (self.start - 1 + self.limit)  # noqa
+            ],
             "metadata": {
-                "total_count": self.total_count,
+                "start": self.start,
                 "limit": self.limit,
-                "self": f"{self.current_page()}",
-                "prev": f"{self.prev_page()}",
-                "next": f"{self.next_page()}",
+                "count": self.count,
+                "self": self.current_page(),
+                "prev": self.prev_page(),
+                "next": self.next_page(),
             },
         }

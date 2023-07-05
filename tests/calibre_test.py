@@ -30,6 +30,55 @@ def test_run_success(calibre):
 
 
 @pytest.mark.parametrize(
+    "keys, expected",
+    (
+        pytest.param(["id"], " --ascending --sort-by=id", id="ascending"),
+        pytest.param(["-id"], " --sort-by=id", id="descending"),
+        pytest.param(
+            ["title", "authors", "uuid"],
+            " --ascending --sort-by=title,authors,uuid",
+            id="multiple",
+        ),
+        pytest.param(
+            ["title", "authors", "-uuid"],
+            " --sort-by=title,authors,uuid",
+            id="multiple descending",
+        ),
+        pytest.param([], " --ascending", id="empty"),
+        pytest.param(["not_exist"], " --ascending", id="invalid"),
+        pytest.param(
+            ["title", "not_exist"],
+            " --ascending --sort-by=title",
+            id="mixed invalid",
+        ),
+    ),
+)
+def test_handle_sort(keys, expected):
+    cmd = "calibredb list"
+    got = dud_wrapper._handle_sort(cmd, keys)
+    assert got == "calibredb list" + expected
+
+
+@pytest.mark.parametrize(
+    "search, expected",
+    (
+        pytest.param(["title:foo"], ' --search "title:foo"', id="single"),
+        pytest.param(
+            ["title:foo", "id:5", "series:bar"],
+            ' --search "title:foo id:5 series:bar"',
+            id="multiple",
+        ),
+        pytest.param(["title:^f*"], ' --search "title:^f*"', id="regex"),
+        pytest.param([], "", id="empty"),
+    ),
+)
+def test_handle_search(search, expected):
+    cmd = "calibredb list"
+    got = dud_wrapper._handle_search(cmd, search)
+    assert got == "calibredb list" + expected
+
+
+@pytest.mark.parametrize(
     "book, expected",
     (
         (

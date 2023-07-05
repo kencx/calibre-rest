@@ -89,6 +89,24 @@ def test_delete(url, seed_book):
     )
 
 
+def test_get_books_empty(url):
+    resp = requests.get(f"{url}/books")
+
+    assert resp.status_code == HTTPStatus.NO_CONTENT
+    assert resp.content == bytes()
+
+
+def test_get_books(url, seed_book):
+    resp = requests.get(f"{url}/books")
+
+    assert resp.status_code == HTTPStatus.OK
+    books = resp.json()["books"]
+    assert len(books) == 1
+
+    metadata = resp.json()["metadata"]
+    print(metadata)
+
+
 def test_add_empty_wrong_media_type(url):
     check_error(
         "POST",

@@ -3,12 +3,14 @@
 All endpoints are wrappers for `calibredb`
 [subcommands](https://manual.calibre-ebook.com/generated/en/calibredb.html).
 
-* [Get Book](#get-book)
-* [Create Book](#create-book)
-* [Update Book](#update-book)
-* [Delete Book](#delete-book)
+* [GET Book](#get-book)
+* [GET Books](#get-books)
+* [POST Book](#post-book)
+* [POST Empty Book](#post-empty-book)
+* [PUT Book](#put-book)
+* [DELETE Book](#delete-book)
 
-### GET <code>/books/{id}</code>
+<h3 id="get-book">GET <code>/books/{id}</code></h3>
 
 <details>
 
@@ -98,7 +100,7 @@ resp = requests.get("localhost:5000/books/1")
 [Return to top](#)
 </details>
 
-### GET <code>/books</code>
+<h3 id="get-books">GET <code>/books/</code></h3>
 
 <details>
 
@@ -106,16 +108,16 @@ resp = requests.get("localhost:5000/books/1")
 Returns JSON data of multiple books.
 </summary>
 
-### Request
+#### Request
 
 * Methods: `GET`
 * Parameters:
-    - `before_id`
-    - `after_id`
-    - `per_page`
-    - `sort`
-    - `search`
-
+    * start: Start index
+    * limit: Maximum number of results in a page
+    * sort: Sort results by field. Sort by ascending `id` by default. Supports
+      descending sort by prepending key with hyphen: `sort=-title`.
+    * search: Filter with search query `search=field:value`. For more advanced
+      search queries, refer to `POST /books/search`
 * Headers: `Accept: application/json`
 
 #### Responses
@@ -129,10 +131,34 @@ Returns JSON data of multiple books.
 {
     "books": [
         {
+            "author_sort": "Doe, John",
             "authors": "John Doe",
+            "formats": [
+                "/library/John Doe/foo (1)/foo - John Doe.txt"
+            ],
+            "id": 1,
+            "identifiers": {},
+            "isbn": "",
+            "languages": [],
+            "last_modified": "2023-06-30T13:45:49+00:00",
+            "pubdate": "0101-01-01T00:00:00+00:00",
+            "series_index": 1.0,
+            "size": 10,
+            "tags": [],
+            "template": "TEMPLATE ERROR 'NoneType' object has no attribute 'startswith'",
+            "timestamp": "2023-06-30T13:45:49+00:00",
             "title": "foobar"
+            "uuid": "4cba90c5-ea7b-43d2-adf8-092f45ed1ff5"
         }
-    ]
+    ],
+    "metadata": {
+        "start": 1,
+        "limit": 10,
+        "count": 100,
+        "self": "/books?start=1&limit=10&search=title:~^foo",
+        "prev": "",
+        "next": "/books?start=11&limit=10&search=title:~^foo"
+    }
 }
 ```
 
@@ -147,6 +173,16 @@ Returns JSON data of multiple books.
 
 ##### Error
 
+* Condition: `start` is more than number of returned results
+* Code: `400 Bad Request`
+* Content:
+
+```json
+{
+    "error": "400 Bad Request: 100 is larger than number of books 5"
+}
+```
+
 <details>
 
 <summary>
@@ -158,6 +194,18 @@ Curl
 
 ```console
 $ curl localhost:5000/books
+
+# sort by title (ASC)
+$ curl localhost:5000/books?sort=title
+
+# sort by title (ASC), authors (DESC)
+$ curl localhost:5000/books?sort=title&sort=-authors
+
+# search for tags fiction
+$ curl localhost:5000/books?search=tags:fiction
+
+# search for tags fiction and title foo
+$ curl localhost:5000/books?search=tags:fiction&search=title:foo
 ```
 
 </details>
@@ -166,7 +214,7 @@ $ curl localhost:5000/books
 [Return to top](#)
 </details>
 
-### POST <code>/books</code>
+<h3 id="post-book">POST <code>/books/</code></h3>
 
 <details>
 
@@ -333,7 +381,7 @@ resp = requests.post(
 [Return to top](#)
 </details>
 
-### POST <code>/books/empty</code>
+<h3 id="post-empty-book">POST <code>/books/empty</code></h3>
 <details>
 
 <summary>
@@ -456,7 +504,7 @@ resp = requests.post("localhost:5000/books/empty", json=payload)
 [Return to top](#)
 </details>
 
-### PUT <code>/books/{id}</code>
+<h3 id="put-book">PUT <code>/books/{id}</code></h3>
 
 <details>
 
@@ -590,7 +638,7 @@ resp = requests.put("localhost:5000/books/1", json=payload)
 [Return to top](#)
 </details>
 
-### DELETE <code>/books/{id}</code>
+<h3 id="delete-book">DELETE <code>/books/{id}</code></h3>
 
 <details>
 

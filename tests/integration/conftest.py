@@ -3,7 +3,7 @@ import re
 import shlex
 import subprocess
 import threading
-from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
 import pytest
 from werkzeug.serving import make_server
@@ -32,12 +32,12 @@ class MockServer:
     def __init__(self, library):
         self.thread = None
 
-        # urlparse only recognizes netloc if prepended with "//"
+        # urlsplit only recognizes netloc if prepended with "//"
         self.bind_addr = TEST_BIND_ADDR
         if re.match(r"^https?://", self.bind_addr) is None:
             self.bind_addr = "http://" + self.bind_addr
 
-        url = urlparse(self.bind_addr, scheme="http")
+        url = urlsplit(self.bind_addr, scheme="http")
         self.app = create_app(
             TestConfig(
                 calibredb=TEST_CALIBREDB_PATH, library=library, bind_addr=url.netloc

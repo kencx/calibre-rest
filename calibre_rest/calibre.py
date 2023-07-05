@@ -46,6 +46,29 @@ class CalibreWrapper:
         "timestamp",
         "title",
     ]
+    SORT_BY_KEYS = [
+        "author_sort",
+        "authors",
+        "comments",
+        "cover",
+        "formats",
+        "id",
+        "identifiers",
+        "isbn",
+        "languages",
+        "last_modified",
+        "pubdate",
+        "publisher",
+        "rating",
+        "series",
+        "series_index",
+        "size",
+        "tags",
+        "template",
+        "timestamp",
+        "title",
+        "uuid",
+    ]
     ALLOWED_FILE_EXTENSIONS = (
         ".azw",
         ".azw3",
@@ -238,32 +261,88 @@ class CalibreWrapper:
         if len(b) == 1:
             return Book(**b[0])
 
-    # TODO sort and filter
-    def get_books(self, limit: int = 10) -> list[Book]:
+    def get_books(
+        self,
+        limit: int = 500,
+        sort: list[str] = None,
+        search: list[str] = None,
+    ) -> list[Book]:
         """Get list of books from calibre database.
 
         Args:
             limit (int): Limit on total number of results
+            sort (list[str]): List of strings to sort results by. Defaults to id
+                only
+            search (str): Search term
 
         Returns:
             list[Book]: List of books
         """
         if limit <= 0:
-            raise ValueError(f"limit {limit} not allowed")
+            raise ValueError(f"{limit=} cannot be <= 0")
 
         cmd = (
             f"{self.cdb_with_lib} list "
             f"--for-machine --fields=all "
             f"--limit={str(limit)}"
         )
+
+        cmd = self._handle_sort(cmd, sort)
+        cmd = self._handle_search(cmd, search)
+
         out, _ = self._run(cmd)
 
         books = json.loads(out)
-        res = []
-        if len(books):
-            for b in books:
-                res.append(Book(**b))
-        return res
+        if not len(books):
+            return []
+
+        return [Book(**b) for b in books]
+
+    def _handle_sort(self, cmd: str, sort: list[str]) -> str:
+        """Handle sort.
+
+        Unlike calibredb, this will default to ascending sort, unless a `-` is
+        prepended to ANY sort keys. Sort keys that are not supported are dropped
+        with a warning.
+
+        Args:
+            cmd (str): Command string to run
+            sort (list[str]): List of sort keys
+
+        Returns:
+            str: Command string with sort flags
+        """
+        if sort is None or not len(sort):
+            # default to ascending
+            cmd += " --ascending"
+            return cmd
+
+        # filter for unsupported sort keys
+        safe_sort = [x for x in sort if x.removeprefix("-") in self.SORT_BY_KEYS]
+        unsafe_sort = [x for x in sort if x not in safe_sort]
+        if len(unsafe_sort):
+            self.logger.warning(
+                f"The following sort keys are not supported and will be ignored: "
+                f"\"{', '.join(unsafe_sort)}\"."
+            )
+
+        descending = any(map(lambda x: x.startswith("-"), safe_sort))
+        if not descending:
+            cmd += " --ascending"
+
+        if len(safe_sort):
+            safe_sort = [x.removeprefix("-") for x in safe_sort]
+            safe_sort = ",".join(safe_sort)
+            cmd += f" --sort-by={safe_sort}"
+
+        return cmd
+
+    def _handle_search(self, cmd: str, search: list[str]) -> str:
+        if search is None or not len(search):
+            return cmd
+
+        cmd += f' --search "{" ".join(search)}"'
+        return cmd
 
     def add_one(
         self, book_path: str, book: Book = None, automerge: str = "ignore"
@@ -413,7 +492,7 @@ class CalibreWrapper:
         if book is None:
             return cmd
 
-        for flag in self.ADD_FLAGS.keys():
+        for flag in self.ADD_FLAGS:
             value = getattr(book, flag)
             if value:
                 flag_name = self.ADD_FLAGS[flag]
@@ -448,7 +527,7 @@ class CalibreWrapper:
             str: Stdout of command, which is usually empty.
         """
         if not all(i >= 0 for i in ids):
-            raise ValueError(f"ids {ids} not allowed")
+            raise ValueError(f"{ids=} not allowed")
 
         cmd = f'{self.cdb_with_lib} remove {",".join(map(str, ids))}'
         if permanent:
@@ -603,4 +682,4 @@ def quote(s: str) -> str:
 
 def validate_id(id: int) -> None:
     if id <= 0:
-        raise ValueError(f"Value {id} cannot be <= 0")
+        raise ValueError(f"Value {id=} cannot be <= 0")
