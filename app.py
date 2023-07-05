@@ -44,13 +44,13 @@ if __name__ == "__main__":
         "-b", "--bind", required=False, type=str, help="Bind address HOST:PORT"
     )
     parser.add_argument(
-        "-v", "--version", required=False, action="store_true", help="Print version"
+        "-v",
+        "--version",
+        action="version",
+        version=f"v{__version__}",
+        help="Print version",
     )
     args = parser.parse_args()
-
-    if args.version:
-        print(__version__)
-        exit(0)
 
     if args.dev:
         app_config = DevConfig(
