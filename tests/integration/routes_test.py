@@ -104,7 +104,7 @@ def test_add_empty_invalid_data(url):
     payload = {"title": 1}
     resp = requests.post(f"{url}/books/empty", json=payload, headers=headers)
 
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
 
 
@@ -158,7 +158,7 @@ def test_add_book_no_file(url):
     check_error(
         "POST",
         f"{url}/books",
-        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.UNPROCESSABLE_ENTITY,
         "No file provided",
         headers={"Content-Type": "multipart/form-data"},
     )
@@ -185,7 +185,7 @@ def test_add_book_invalid_filename(url, test_txt, filename):
     check_error(
         "POST",
         f"{url}/books",
-        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.UNPROCESSABLE_ENTITY,
         "Invalid filename",
         files=test_txt(filename),
     )
@@ -197,7 +197,7 @@ def test_add_book_invalid_data(url, test_txt):
         f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
     )
 
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
 
 
@@ -207,7 +207,7 @@ def test_add_book_invalid_key(url, test_txt):
         f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
     )
 
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert "'random' was unexpected" in resp.json()["errors"][0]["key"]
 
 
@@ -218,7 +218,7 @@ def test_add_book_invalid_data_multiple(url, test_txt):
     )
     errors = resp.json()["errors"]
 
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert "'string' is not of type 'number'" in errors[0]["series_index"]
     assert "1 is not of type 'string'" in errors[1]["title"]
     assert "'random' was unexpected" in errors[2]["key"]
@@ -248,7 +248,7 @@ def test_add_book_automerge_invalid_value(url, test_txt):
         f"{url}/books", files=test_txt("test.txt"), data={"data": json.dumps(payload)}
     )
 
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert (
         "'invalid value' is not one of ['ignore', 'overwrite', 'new_record']"
         in resp.json()["errors"][0]["automerge"]
@@ -445,7 +445,7 @@ def test_update_book_invalid_data(url, seed_book):
     payload = {"title": 1}
     resp = requests.put(f"{url}/books/{id}", json=payload)
 
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert "1 is not of type 'string'" in resp.json()["errors"][0]["title"]
 
 
@@ -455,7 +455,7 @@ def test_update_book_invalid_key(url, seed_book):
     payload = {"title": "foo", "random": "value"}
     resp = requests.put(f"{url}/books/{id}", json=payload)
 
-    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert "'random' was unexpected" in resp.json()["errors"][0]["key"]
 
 

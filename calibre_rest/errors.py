@@ -23,7 +23,7 @@ class CalibreConcurrencyError(CalibreRuntimeError):
 class InvalidPayloadError(HTTPException):
     """Raise when HTTP request payload is invalid or missing."""
 
-    code = 400
+    code = 422
 
     def __init__(self, message: str):
         super().__init__(description=message)

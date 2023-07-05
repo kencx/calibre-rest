@@ -257,7 +257,7 @@ The `id` of the added or overwritten books.
 ```
 
 * Condition: File data failed validation, e.g. Filename not supported
-* Code: `400 Bad Request`
+* Code: `422 Unprocessable Entity`
 * Content:
 
 ```json
@@ -267,7 +267,7 @@ The `id` of the added or overwritten books.
 ```
 
 * Condition: JSON data failed validation
-* Code: `400 Bad Request`
+* Code: `422 Unprocessable Entity`
 * Content:
 
 ```json
@@ -405,7 +405,7 @@ The `id` of the added or overwritten books.
 ```
 
 * Condition: JSON data failed validation
-* Code: `400 Bad Request`
+* Code: `422 Unprocessable Entity`
 * Content:
 
 ```json
@@ -550,7 +550,7 @@ resp = requests.post("localhost:5000/books/empty", json=payload)
 
 
 * Condition: JSON data failed validation
-* Code: `400 Bad Request`
+* Code: `422 Unprocessable Entity`
 * Content:
 
 ```json

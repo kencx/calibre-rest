@@ -38,7 +38,6 @@ def get_book(id):
     return response(200, jsonify(books=book))
 
 
-# TODO list with sort, filter search, pagination
 @app.route("/books")
 def get_books():
     """Get list of books.
@@ -196,7 +195,7 @@ def handle_json_decode_error(e):
 
 @app.errorhandler(TimeoutError)
 def handle_timeout_error(e):
-    return jsonify(error=str(e)), 500
+    return jsonify(error=str(e)), 408
 
 
 @app.errorhandler(ValueError)
@@ -225,7 +224,7 @@ def validate(data: str, cls):
     data (str): JSON string.
 
     Raises:
-    HTTPException: 400 error code when validation fails
+    HTTPException: 422 error code when validation fails
     """
     if data is None or data == bytes():
         app.logger.warning("No input data provided")
@@ -240,7 +239,7 @@ def validate(data: str, cls):
                 data["errors"].append({e.path.popleft(): e.message})
             else:
                 data["errors"].append({"key": e.message})
-        abort(response(400, jsonify(data)))
+        abort(response(422, jsonify(data)))
 
 
 def allowed_file(filename: str) -> bool:

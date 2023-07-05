@@ -82,9 +82,9 @@ class Book:
     v = Draft202012Validator(SCHEMA)
 
     @classmethod
-    def validate(self, instance):
+    def validate(cls, instance):
         # TODO valid identifiers object must be dict(str, str)
-        return sorted(self.v.iter_errors(instance), key=str)
+        return sorted(cls.v.iter_errors(instance), key=str)
 
 
 class PaginatedResults:
