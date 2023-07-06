@@ -20,9 +20,13 @@ Calibre library. I wrote this project as I could not find a good
 language-agnostic method to programmatically manipulate a Calibre library
 (locally or remotely).
 
-```console
+```bash
 # get metadata with book id
 $ curl localhost:5000/books/1
+
+# query books with title
+$ curl --get --data-urlencode "search=title:~^foo.*bar$" \
+    http://localhost:5000/books
 
 # add ebook file to library
 $ curl -X POST -H "Content-Type:multipart/form-data" \
@@ -30,7 +34,7 @@ $ curl -X POST -H "Content-Type:multipart/form-data" \
 ```
 
 See [API.md](API.md) for
-documentation of all API endpoints.
+full documentation of all API endpoints and examples.
 
 calibre-rest is not meant to be a direct replacement for [Calibre Content
 Server](https://manual.calibre-ebook.com/server.html). It does not have any
@@ -211,10 +215,13 @@ $ make run.dev
 $ make test
 ```
 
+>**NOTE**: If using Python <=3.10, please compile your own `requirements.txt`
+>with `pip-compile`.
+
 ## Roadmap
 
 - [x] Support remote libraries
-- [ ] Pagination
+- [x] Pagination
 - [ ] TLS support
 - [ ] Authentication
 - [ ] Feature parity with `calibredb`
