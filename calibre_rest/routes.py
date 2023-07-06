@@ -43,10 +43,11 @@ def get_books():
     """Get paginated list of books.
 
     Query Parameters:
-        start (int): Offset or start index
-        limit (int): Maximum number of results on a page
-        sort (list): Sort results by field. Supports descending sort with hyphen `-`.
-        search (list): Filter results with Calibre's search interface
+        start (int): Offset index.
+        limit (int): Limit on number of results per page.
+        sort (list): Sort results by given field. Supports descending sort with hyphen `-`.
+        search (list): Search query string that supports Calibre's search
+            interface.
     """
 
     start = request.args.get("start") or 1

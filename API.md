@@ -30,28 +30,39 @@ Returns JSON data of a single book
 
 * Code: `200 OK`
 * Content:
+    * `books` - A single book object
 
 ```json
 {
     "books": {
-        "author_sort": "Doe, John",
-        "authors": "John Doe",
+        "author_sort": "Tchaikovsky, Adrian",
+        "authors": "Adrian Tchaikovsky",
+        "cover": "/books/Adrian Tchaikovsky/Children of Time (1)/cover.jpg",
         "formats": [
-            "/library/John Doe/foo (1)/foo - John Doe.txt"
+            "/books/Adrian Tchaikovsky/Children of Time (1)/Children of Time - Adrian Tchaikovsky.epub"
         ],
         "id": 1,
-        "identifiers": {},
-        "isbn": "",
-        "languages": [],
-        "last_modified": "2023-06-30T13:45:49+00:00",
-        "pubdate": "0101-01-01T00:00:00+00:00",
+        "identifiers": {
+            "isbn10": "1447273281"
+        },
+        "isbn": "9781447273288",
+        "languages": ["eng"],
+        "last_modified": "2023-05-16T06:19:44+00:00",
+        "pubdate": "2015-06-04T00:00:00+00:00",
+        "publisher": "Tor Books",
+        "series": "Children of Time",
         "series_index": 1.0,
-        "size": 10,
-        "tags": [],
+        "size": 518137,
+        "tags": [
+            "Science Fiction",
+            "Aliens",
+            "Uplift",
+            "First Contact"
+        ],
         "template": "TEMPLATE ERROR 'NoneType' object has no attribute 'startswith'",
-        "timestamp": "2023-06-30T13:45:49+00:00",
-        "title": "foo",
-        "uuid": "4cba90c5-ea7b-43d2-adf8-092f45ed1ff5"
+        "timestamp": "2022-10-28T07:43:27+00:00",
+        "title": "Children of Time",
+        "uuid": "89076f50-09a9-4384-867a-4e58491f7f22"
     }
 }
 ```
@@ -111,14 +122,42 @@ Returns JSON data of multiple books.
 #### Request
 
 * Methods: `GET`
-* Parameters:
-    * start: Start index
-    * limit: Maximum number of results in a page
-    * sort: Sort results by field. Sort by ascending `id` by default. Supports
-      descending sort by prepending key with hyphen: `sort=-title`.
-    * search: Filter with search query `search=field:value`. For more advanced
-      search queries, refer to `POST /books/search`
 * Headers: `Accept: application/json`
+
+##### Query Parameters
+
+* `start` (optional) - Offset index for pagination, defaults to 1.
+* `limit` (optional) - Limit on the number of results to return, defaults to 20.
+
+```bash
+# page 2 of results
+$ curl localhost:5000/books?start=11&limit=10
+```
+
+* `sort` (optional) - Sort results by given field, defaults to ascending `id`.
+  Supports descending sort by prepending with hyphen `-`.
+
+```bash
+# sort by descending id
+$ curl localhost:5000/books?sort=-id
+
+# sort by descending title and tags
+$ curl localhost:5000/books?sort=-title&sort=tags
+```
+
+* `search` (optional) - Search query string that supports [Calibre's search
+  interface](https://manual.calibre-ebook.com/en/gui.html#the-search-interface).
+  <!-- For more advanced search queries, refer to `POST /books/search` -->
+
+```bash
+# simple title search
+$ curl localhost:5000/books?search=title:foobar
+
+# equality search for the tag "fiction"
+$ curl --get --data-urlencode "search=tags:=fiction" localhost:5000/books
+```
+
+See examples for more.
 
 #### Responses
 
@@ -126,29 +165,45 @@ Returns JSON data of multiple books.
 
 * Code: `200 OK`
 * Content:
+    * `books`: List of books returned
+    * `metadata`:
+        * `count`: Total count of all results (unpaginated)
+        * `self`: Current page's query
+        * `prev`: Previous page's query
+        * `next`: Next page's query
 
 ```json
 {
     "books": [
         {
-            "author_sort": "Doe, John",
-            "authors": "John Doe",
+            "author_sort": "Tchaikovsky, Adrian",
+            "authors": "Adrian Tchaikovsky",
+            "cover": "/books/Adrian Tchaikovsky/Children of Time (1)/cover.jpg",
             "formats": [
-                "/library/John Doe/foo (1)/foo - John Doe.txt"
+                "/books/Adrian Tchaikovsky/Children of Time (1)/Children of Time - Adrian Tchaikovsky.epub"
             ],
             "id": 1,
-            "identifiers": {},
-            "isbn": "",
-            "languages": [],
-            "last_modified": "2023-06-30T13:45:49+00:00",
-            "pubdate": "0101-01-01T00:00:00+00:00",
+            "identifiers": {
+                "isbn10": "1447273281"
+            },
+            "isbn": "9781447273288",
+            "languages": ["eng"],
+            "last_modified": "2023-05-16T06:19:44+00:00",
+            "pubdate": "2015-06-04T00:00:00+00:00",
+            "publisher": "Tor Books",
+            "series": "Children of Time",
             "series_index": 1.0,
-            "size": 10,
-            "tags": [],
+            "size": 518137,
+            "tags": [
+                "Science Fiction",
+                "Aliens",
+                "Uplift",
+                "First Contact"
+            ],
             "template": "TEMPLATE ERROR 'NoneType' object has no attribute 'startswith'",
-            "timestamp": "2023-06-30T13:45:49+00:00",
-            "title": "foobar"
-            "uuid": "4cba90c5-ea7b-43d2-adf8-092f45ed1ff5"
+            "timestamp": "2022-10-28T07:43:27+00:00",
+            "title": "Children of Time",
+            "uuid": "89076f50-09a9-4384-867a-4e58491f7f22"
         }
     ],
     "metadata": {
@@ -192,20 +247,27 @@ Returns JSON data of multiple books.
 
 Curl
 
-```console
-$ curl localhost:5000/books
-
-# sort by title (ASC)
-$ curl localhost:5000/books?sort=title
-
-# sort by title (ASC), authors (DESC)
-$ curl localhost:5000/books?sort=title&sort=-authors
-
-# search for tags fiction
-$ curl localhost:5000/books?search=tags:fiction
-
+```bash
 # search for tags fiction and title foo
 $ curl localhost:5000/books?search=tags:fiction&search=title:foo
+
+# boolean search
+$ curl --get --data-urlencode "search=title:'foo or bar'" localhost:5000/books
+
+# regex
+$ curl --get --data-urlencode "search=title:~^foo.*bar$" localhost:5000/books
+```
+
+Python
+
+```python
+import requests
+
+params = {"search": "title: 'foo or bar'"}
+# or
+params = {"search": "title:~^foo.*bar$"}
+
+resp = requests.get("localhost:5000/books", params=params)
 ```
 
 </details>
@@ -224,32 +286,24 @@ $ curl localhost:5000/books?search=tags:fiction&search=title:foo
 
 #### Request
 
-##### File Only
-
 * Methods: `POST`
 * Headers: `Content-Type: multipart/form-data`
-* Data:
-    * A file with a [valid ebook
-      extension](https://manual.calibre-ebook.com/faq.html#what-formats-does-calibre-support-conversion-to-from).
-      Filename cannot start with hyphen `-`.
+* Data: File(s) and optional JSON data
 
-##### Multiple Files
+##### File
 
-* Methods: `POST`
-* Headers: `Content-Type: multipart/form-data`
-* Data:
-    * Files with a [valid ebook
-      extension](https://manual.calibre-ebook.com/faq.html#what-formats-does-calibre-support-conversion-to-from).
-      Filenames cannot start with hyphen `-`.
+* File must have a [valid ebook
+  extension](https://manual.calibre-ebook.com/faq.html#what-formats-does-calibre-support-conversion-to-from).
+* Filename cannot start with hyphen `-`.
+* Multiple files are supported.
 
-##### File and JSON Data
+>**NOTE**: When POST-ing multiple files with JSON data, all new entries will be
+>created with same metadata. This will fail unless `automerge=new_record` is
+>included.
 
-* Methods: `POST`
-* Headers: `Content-Type: multipart/form-data`
-* Data:
-    * A file with a valid ebook extension. Filename cannot start with hyphen
-      `-`.
-    * JSON data with the following OPTIONAL keys:
+##### JSON Data
+
+* The following keys are supported:
 
 ```json
 {
@@ -282,15 +336,9 @@ already exist in the library.
 >a new record will be created, regardless of the value given to `automerge`.
 
 >**NOTE**: If the same file exists across multiple different entries in the same
->library, as a result of using `automerge=new_record`, and we add another
+>library as a result of using `automerge=new_record`, and we add another
 >instance of the same file with `automerge=overwrite`, the new file would
 >overwrite ALL existing entries with the same file in the library.
-
-##### Multiple Files and JSON Data
-
-When POST-ing multiple files with JSON data, all files will be using the same
-metadata. Because calibredb will attempt to create multiple entries with the same
-data, this will fail unless the `automerge: new_record` key is included.
 
 #### Responses
 
@@ -298,14 +346,13 @@ data, this will fail unless the `automerge: new_record` key is included.
 
 * Code: `201 CREATED`
 * Content:
+    * `id`: List of ids of added or overwritten book(s).
 
 ```json
 {
     "id": ["2"]
 }
 ```
-
-The `id` of the added or overwritten book(s).
 
 ##### Error
 
@@ -457,14 +504,13 @@ already exist in the library.
 
 * Code: `201 CREATED`
 * Content:
+    * `id`: List of ids of added or overwritten book(s).
 
 ```json
 {
     "id": ["2"]
 }
 ```
-
-The `id` of the added or overwritten books.
 
 ##### Error
 
@@ -574,29 +620,41 @@ resp = requests.post("localhost:5000/books/empty", json=payload)
 
 * Code: `200 OK`
 * Content:
+    * `books` - Updated book object
 
 ```json
 {
     "books": {
-        "author_sort": "Doe, John",
-        "authors": "John Doe",
+        "author_sort": "Tchaikovsky, Adrian",
+        "authors": "Adrian Tchaikovsky",
+        "cover": "/books/Adrian Tchaikovsky/Children of Time (1)/cover.jpg",
         "formats": [
-            "/library/John Doe/foo (1)/foo - John Doe.txt"
+            "/books/Adrian Tchaikovsky/Children of Time (1)/Children of Time - Adrian Tchaikovsky.epub"
         ],
         "id": 1,
-        "identifiers": {},
-        "isbn": "",
-        "languages": [],
-        "last_modified": "2023-06-30T13:45:49+00:00",
-        "pubdate": "0101-01-01T00:00:00+00:00",
+        "identifiers": {
+            "isbn10": "1447273281"
+        },
+        "isbn": "9781447273288",
+        "languages": ["eng"],
+        "last_modified": "2023-05-16T06:19:44+00:00",
+        "pubdate": "2015-06-04T00:00:00+00:00",
+        "publisher": "Tor Books",
+        "series": "Children of Time",
         "series_index": 1.0,
-        "size": 10,
-        "tags": [],
+        "size": 518137,
+        "tags": [
+            "Science Fiction",
+            "Aliens",
+            "Uplift",
+            "First Contact"
+        ],
         "template": "TEMPLATE ERROR 'NoneType' object has no attribute 'startswith'",
-        "timestamp": "2023-06-30T13:45:49+00:00",
-        "title": "foo",
-        "uuid": "4cba90c5-ea7b-43d2-adf8-092f45ed1ff5"
-    }
+        "timestamp": "2022-10-28T07:43:27+00:00",
+        "title": "Children of Time",
+        "uuid": "89076f50-09a9-4384-867a-4e58491f7f22"
+  }
+
 }
 ```
 

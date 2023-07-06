@@ -36,6 +36,16 @@ def seed_book(url, test_txt):
     delete(url, id[0])
 
 
+@pytest.fixture()
+def seed_books(url, test_txt):
+    """Add multiple books to database and delete on cleanup."""
+    files = [("file", (f"foo{str(i)}.txt", f"hello {str(i)}")) for i in range(1, 6)]
+    ids = post(f"{url}/books", HTTPStatus.CREATED, files=files)
+    yield ids
+    for i in ids:
+        delete(url, i)
+
+
 def test_version(url):
     resp = requests.get(f"{url}/health")
     assert resp.status_code == HTTPStatus.OK
@@ -96,15 +106,92 @@ def test_get_books_empty(url):
     assert resp.content == bytes()
 
 
-def test_get_books(url, seed_book):
+def test_get_books_basic(url, seed_books):
     resp = requests.get(f"{url}/books")
 
     assert resp.status_code == HTTPStatus.OK
-    books = resp.json()["books"]
-    assert len(books) == 1
+    assert len(resp.json()["books"]) == 5
 
     metadata = resp.json()["metadata"]
-    print(metadata)
+    assert metadata["start"] == 1
+    assert metadata["limit"] == 20
+    assert metadata["prev"] == ""
+    assert metadata["next"] == ""
+    assert metadata["self"] == "/books?start=1&limit=20"
+
+
+def test_get_books_high_start(url, seed_book):
+    """Tests that 400 error is returned if start query param is larger than
+    number of returned books.
+    """
+    seed_book
+    resp = requests.get(f"{url}/books?start=5")
+
+    assert resp.status_code == HTTPStatus.BAD_REQUEST
+    assert "start 5 is larger than number of books" in resp.json()["error"]
+
+
+def test_get_books_pagination(url, seed_books):
+    resp = requests.get(f"{url}/books?start=2&limit=2")
+    assert resp.status_code == HTTPStatus.OK
+
+    books = resp.json()["books"]
+    assert len(books) == 2
+    assert books[0]["title"] == "foo2"
+    assert books[1]["title"] == "foo3"
+
+    metadata = resp.json()["metadata"]
+    assert metadata["self"] == "/books?start=2&limit=2"
+    assert metadata["prev"] == "/books?start=1&limit=2"
+    assert metadata["next"] == "/books?start=4&limit=2"
+
+
+def test_get_books_sort(url, seed_books):
+    resp = requests.get(f"{url}/books?limit=2&sort=title")
+    assert resp.status_code == HTTPStatus.OK
+
+    books = resp.json()["books"]
+    assert len(books) == 2
+    assert books[0]["title"] == "foo1"
+    assert books[1]["title"] == "foo2"
+
+
+def test_get_books_sort_multiple(url, seed_books):
+    resp = requests.get(f"{url}/books?limit=2&sort=-title&sort=id")
+    assert resp.status_code == HTTPStatus.OK
+
+    books = resp.json()["books"]
+    assert len(books) == 2
+    assert books[0]["title"] == "foo5"
+    assert books[1]["title"] == "foo4"
+
+
+def test_get_books_search_basic(url, seed_books):
+    resp = requests.get(f"{url}/books?search=title:foo1")
+    assert resp.status_code == HTTPStatus.OK
+
+    books = resp.json()["books"]
+    assert len(books) == 1
+    assert books[0]["title"] == "foo1"
+
+
+def test_get_books_search_multiple(url, seed_books):
+    resp = requests.get(f"{url}/books?search=title:foo1&search=authors:bar")
+    assert resp.status_code == HTTPStatus.NO_CONTENT
+
+
+@pytest.mark.parametrize(
+    "params, count",
+    (
+        pytest.param({"search": "title:foo1 or foo2"}, 2, id="bool"),
+        pytest.param({"search": "title:~^foo\\d"}, 5, id="regex"),
+    ),
+)
+def test_get_books_search_advanced(url, seed_books, params, count):
+    resp = requests.get(f"{url}/books", params=params)
+    assert resp.status_code == HTTPStatus.OK
+
+    assert len(resp.json()["books"]) == count
 
 
 def test_add_empty_wrong_media_type(url):
@@ -177,7 +264,7 @@ def test_add_book_no_file(url):
         "POST",
         f"{url}/books",
         HTTPStatus.UNPROCESSABLE_ENTITY,
-        "No file provided",
+        "No file(s) provided",
         headers={"Content-Type": "multipart/form-data"},
     )
 
@@ -263,9 +350,9 @@ def test_add_book_file_data(url, test_txt):
 def test_add_book_multiple_files(url):
     files = [
         ("file", open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb")),
-        ("other", open(os.path.join(TEST_LIBRARY_PATH, "foo.txt"), "rb")),
+        ("other", ("bar.txt", "foobar")),
     ]
-    payload = {"title": "foo", "automerge": "new_record"}
+    payload = {"title": "bar", "automerge": "new_record"}
     added_ids = post(
         f"{url}/books",
         HTTPStatus.CREATED,
@@ -274,7 +361,7 @@ def test_add_book_multiple_files(url):
     )
 
     for i in added_ids:
-        get(url, i, HTTPStatus.OK, {"title": "foo", "id": int(i)})
+        get(url, i, HTTPStatus.OK, {"title": "bar", "id": int(i)})
         delete(url, i)
 
 
