@@ -219,7 +219,7 @@ $ curl localhost:5000/books?search=tags:fiction&search=title:foo
 <details>
 
 <summary>
-    Create book with file and JSON data
+    Create book(s) with file(s) and JSON data
 </summary>
 
 #### Request
@@ -232,6 +232,15 @@ $ curl localhost:5000/books?search=tags:fiction&search=title:foo
     * A file with a [valid ebook
       extension](https://manual.calibre-ebook.com/faq.html#what-formats-does-calibre-support-conversion-to-from).
       Filename cannot start with hyphen `-`.
+
+##### Multiple Files
+
+* Methods: `POST`
+* Headers: `Content-Type: multipart/form-data`
+* Data:
+    * Files with a [valid ebook
+      extension](https://manual.calibre-ebook.com/faq.html#what-formats-does-calibre-support-conversion-to-from).
+      Filenames cannot start with hyphen `-`.
 
 ##### File and JSON Data
 
@@ -277,6 +286,12 @@ already exist in the library.
 >instance of the same file with `automerge=overwrite`, the new file would
 >overwrite ALL existing entries with the same file in the library.
 
+##### Multiple Files and JSON Data
+
+When POST-ing multiple files with JSON data, all files will be using the same
+metadata. Because calibredb will attempt to create multiple entries with the same
+data, this will fail unless the `automerge: new_record` key is included.
+
 #### Responses
 
 ##### Success
@@ -290,7 +305,7 @@ already exist in the library.
 }
 ```
 
-The `id` of the added or overwritten books.
+The `id` of the added or overwritten book(s).
 
 ##### Error
 
@@ -346,8 +361,11 @@ The `id` of the added or overwritten books.
 Curl
 
 ```console
-# file only
+# single file
 $ curl -X POST -H "Content-Type:multipart/form-data" --form "file=@foo.epub" http://localhost:5000/books
+
+# multiple files
+$ curl -X POST --H "Content-Type: multipart/form-data" --form "file=@bar.epub" --form "file=@foo.epub" http://localhost:5000/books
 
 # file and JSON data
 $ curl -X POST --H "Content-Type: multipart/form-data" --form "data=data.json" --form "file=@foo.epub" http://localhost:5000/books
@@ -357,7 +375,15 @@ Python
 ```python
 import requests
 
+# single file
 files = {"file": open("foo.epub", "rb")}
+
+# multiple files (file key does not matter)
+files = [
+    ("file", open("test.txt", "rb")),
+    ("other", open("foo.txt", "rb")),
+]
+
 payload = {
     "authors": ["John Doe", "Ben Adams"],
     "identifiers": {"isbn": "abcd1234", "asin": "foobar123"},

@@ -260,6 +260,24 @@ def test_add_book_file_data(url, test_txt):
     delete(url, added_id)
 
 
+def test_add_book_multiple_files(url):
+    files = [
+        ("file", open(os.path.join(TEST_LIBRARY_PATH, "test.txt"), "rb")),
+        ("other", open(os.path.join(TEST_LIBRARY_PATH, "foo.txt"), "rb")),
+    ]
+    payload = {"title": "foo", "automerge": "new_record"}
+    added_ids = post(
+        f"{url}/books",
+        HTTPStatus.CREATED,
+        files=files,
+        data={"data": json.dumps(payload)},
+    )
+
+    for i in added_ids:
+        get(url, i, HTTPStatus.OK, {"title": "foo", "id": int(i)})
+        delete(url, i)
+
+
 def test_add_book_automerge_invalid_value(url, test_txt):
     payload = {"automerge": "invalid value"}
     resp = requests.post(

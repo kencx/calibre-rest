@@ -66,7 +66,6 @@ def get_books():
     return response(200, jsonify(res.todict()))
 
 
-# TODO add multiple and with directory
 @app.route("/books", methods=["POST"])
 def add_book():
     """Add book to calibre library with book file and optional data."""
@@ -74,25 +73,7 @@ def add_book():
     if "multipart/form-data" not in request.content_type:
         abort(415, "Only multipart/form-data allowed")
 
-    if "file" not in request.files:
-        raise InvalidPayloadError("No file provided")
-
-    file = request.files["file"]
-    if file and file.filename == "":
-        raise InvalidPayloadError("Invalid file or filename")
-
-    if not allowed_file(file.filename):
-        raise InvalidPayloadError(f"Invalid filename ({file.filename})")
-
-    # save file to a temporary location for upload
-    tempdir = tempfile.gettempdir()
-    tempfilepath = path.join(tempdir, secure_filename(file.filename))
-    file.save(tempfilepath)
-
-    if not path.isfile(tempfilepath):
-        raise FileNotFoundError(f"{tempfilepath} not found.")
-
-    book = Book()
+    filepaths = check_files(request)
 
     # Check if optional input data exists in form field "data".
     # If exists, check for "automerge" key to modify automerge behaviour.
@@ -101,6 +82,7 @@ def add_book():
     json_data = request.form.get("data")
     validate(json_data, Book)
     automerge = "ignore"
+    book = Book()
 
     if json_data is not None:
         data = json.loads(json_data)
@@ -108,8 +90,37 @@ def add_book():
         if len(data):
             book = Book(**data)
 
-    id = calibredb.add_one(tempfilepath, book, automerge)
+    id = calibredb.add_multiple(filepaths, book, automerge)
     return response(201, jsonify(id=id))
+
+
+def check_files(request) -> list[str]:
+    if not len(request.files.keys()):
+        raise InvalidPayloadError("No file(s) provided")
+
+    tempdir = tempfile.gettempdir()
+    filepaths = []
+
+    # flatten list of lists
+    files = [f for values in request.files.listvalues() for f in values]
+
+    for file in files:
+        if file and file.filename == "":
+            raise InvalidPayloadError("Invalid file or filename")
+
+        if not allowed_file(file.filename):
+            raise InvalidPayloadError(f"Invalid filename ({file.filename})")
+
+        # save file to a temporary location for upload
+        tempfilepath = path.join(tempdir, secure_filename(file.filename))
+        file.save(tempfilepath)
+
+        if not path.isfile(tempfilepath):
+            raise FileNotFoundError(f"{tempfilepath} not found.")
+
+        filepaths.append(tempfilepath)
+
+    return filepaths
 
 
 @app.route("/books/empty", methods=["POST"])

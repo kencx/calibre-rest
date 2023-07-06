@@ -104,7 +104,7 @@ class CalibreWrapper:
 
     CONCURRENCY_ERR_REGEX = re.compile(r"^Another calibre program.*is running.")
     CALIBRE_VERSION_REGEX = re.compile(r"calibre ([\d.]+)")
-    BOOK_ADDED_REGEX = re.compile(r"^Added book ids: ([0-9,]+)")
+    BOOK_ADDED_REGEX = re.compile(r"^Added book ids: ([0-9, ]+)")
     BOOK_MERGED_REGEX = re.compile(r"^Merged book ids: ([0-9, ]+)")
     BOOK_IGNORED_REGEX = re.compile(
         r"^The following books were not added as they already exist.*"
@@ -348,6 +348,47 @@ class CalibreWrapper:
 
         cmd += f' --search "{" ".join(search)}"'
         return cmd
+
+    def add_multiple(
+        self, book_paths: list[str], book: Book = None, automerge: str = "ignore"
+    ) -> list[int]:
+        """Add multiple books to the calibredb database.
+
+         Args:
+             book_paths (list[str]): List of book file paths to upload. A list of
+                 supported file extensions is given by self.ALLOWED_FILE_EXTENSIONS.
+                 Filenames cannot begin with a hyphen.
+             book (Book): Optional book instance with additional metadata.
+             automerge (str): Modifies the behaviour of calibredb when a book is
+             found to already exist in the library. Accepts one of the following:
+                 - ignore (default): Ignore the duplicate and return a 409 Conflict
+                 error. This will not add any new records or files.
+                 - overwrite: Overwrite the existing file with the new file, leaving
+                 only a single record.
+                 - new_record Create a new record entirely. This will result in two
+                 different records.
+
+             If the same file is uploaded with different JSON metadata, a new
+             record will be created, regardless of the value given to
+             `automerge`.
+
+             If the same file exists across multiple different entries in the
+             same library, as a result of using `automerge=new_record`, and we
+             add another instance of the same file with `automerge=overwrite`,
+             the new file would overwrite ALL existing entries with the same file
+             in the library.
+
+        Returns:
+             list[int]: List of IDs of added/merged book(s).
+        """
+        if len(book_paths) == 1:
+            return self.add_one(book_paths[0], book, automerge)
+
+        if any(map(lambda x: not path.exists(x), book_paths)):
+            raise FileNotFoundError(f"Failed to find book at {book_paths}")
+
+        cmd = f"{self.cdb_with_lib} add {' '.join(book_paths)}"
+        return self._run_add(cmd, book, automerge)
 
     def add_one(
         self, book_path: str, book: Book = None, automerge: str = "ignore"
