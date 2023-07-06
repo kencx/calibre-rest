@@ -40,32 +40,21 @@ def get_book(id):
 
 @app.route("/books")
 def get_books():
-    """Get list of books.
+    """Get paginated list of books.
 
     Query Parameters:
-        start: Start index
-        limit: Maximum number of results in a page
-        sort: Sort results by field
-        search: Search results with Calibre's search interface
+        start (int): Offset or start index
+        limit (int): Maximum number of results on a page
+        sort (list): Sort results by field. Supports descending sort with hyphen `-`.
+        search (list): Filter results with Calibre's search interface
     """
 
     start = request.args.get("start") or 1
-    limit = request.args.get("limit") or 500
+    limit = request.args.get("limit") or 20
     sort = request.args.getlist("sort") or None
     search = request.args.getlist("search") or None
 
-    # Currently, calibredb fetches all books with the query and we perform the
-    # pagination on the results after. This means all results are fetched for
-    # every page query with no caching. This seems extremely wasteful, and the
-    # ideal way should be to perform pagination during the query, but calibredb
-    # does not support any form of offset or cursor based pagination of its
-    # results.
-
-    # Naively, we set a hard limit on the maximum number of results calibredb
-    # can fetch in one query, but there would no way to access the results that
-    # come after the limit with the same query.
-
-    books = calibredb.get_books(int(limit), sort, search)
+    books = calibredb.get_books(sort, search, all=False)
     if not len(books):
         return response(204, jsonify(books=[]))
 

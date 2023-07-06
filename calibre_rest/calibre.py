@@ -263,28 +263,34 @@ class CalibreWrapper:
 
     def get_books(
         self,
-        limit: int = 500,
         sort: list[str] = None,
         search: list[str] = None,
+        all: bool = False,
     ) -> list[Book]:
-        """Get list of books from calibre database.
+        """Get a list of (sorted and filtered) books from the calibre database.
 
-        Args:
-            limit (int): Limit on total number of results
-            sort (list[str]): List of strings to sort results by. Defaults to id
-                only
-            search (str): Search term
+        A maximum limit of 5000 is set on the total number of results. This limit
+        was introduced as calibredb does not natively support offset or cursor
+        pagination for its results. If a user should require more results than
+        the maximum limit, they can opt to ignore the limit by passing the
+        all=True argument or narrow their search with appropriate filters.
 
-        Returns:
-            list[Book]: List of books
+         Args:
+             sort (list[str]): List of sort keys to sort results by
+             search (str): List of search terms
+             all (bool): Return all results of filtered query.
+
+         Returns:
+             list[Book]: List of books
         """
-        if limit <= 0:
-            raise ValueError(f"{limit=} cannot be <= 0")
+        max_limit = "all"
+        if not all:
+            max_limit = "5000"
 
         cmd = (
             f"{self.cdb_with_lib} list "
             f"--for-machine --fields=all "
-            f"--limit={str(limit)}"
+            f"--limit={max_limit}"
         )
 
         cmd = self._handle_sort(cmd, sort)
@@ -301,9 +307,8 @@ class CalibreWrapper:
     def _handle_sort(self, cmd: str, sort: list[str]) -> str:
         """Handle sort.
 
-        Unlike calibredb, this will default to ascending sort, unless a `-` is
-        prepended to ANY sort keys. Sort keys that are not supported are dropped
-        with a warning.
+        Defaults to ascending sort, unless a `-` is prepended to ANY sort keys.
+        Sort keys that are not supported are dropped with a warning.
 
         Args:
             cmd (str): Command string to run

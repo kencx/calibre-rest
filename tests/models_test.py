@@ -14,6 +14,13 @@ def books():
     ]
 
 
+def test_pagination_init(books):
+    with pytest.raises(Exception) as exc:
+        PaginatedResults(books, 10, 2)
+
+    assert exc.value.args[0] == "start 10 is larger than number of books (5)"
+
+
 @pytest.mark.parametrize(
     "start, limit, count, prev, next",
     (
