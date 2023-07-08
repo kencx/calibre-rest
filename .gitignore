@@ -7,6 +7,7 @@ instance/*
 .pytest_cache/*
 .coverage
 testdata/*
+exports/*
 
 calibre/*
 library/*

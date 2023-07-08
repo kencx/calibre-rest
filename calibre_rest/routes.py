@@ -1,10 +1,11 @@
 import json
+import os
+import os.path as path
 import tempfile
-from os import path
 
 from flask import abort
 from flask import current_app as app
-from flask import jsonify, make_response, request
+from flask import jsonify, make_response, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
@@ -181,10 +182,28 @@ def delete_book(id):
     return response(200, "")
 
 
-# export
-@app.route("/export/<int:id>")
-def export_book(id):
-    pass
+@app.route("/export/<int:id>", methods=["GET"])
+def export_book(id=None):
+    """Export existing book from calibre library to file."""
+    ids = request.args.getlist("id") or None
+    if ids is None:
+        ids = [id]
+
+    with tempfile.TemporaryDirectory() as exports_dir:
+        try:
+            calibredb.export(ids, exports_dir)
+        except KeyError as e:
+            abort(404, e)
+
+        # check exports_dir for files
+        files = [
+            f for f in os.listdir(exports_dir) if path.isfile(path.join(exports_dir, f))
+        ]
+
+        if len(files) <= 0:
+            abort(500)
+        else:
+            return send_from_directory(exports_dir, files[0], as_attachment=True)
 
 
 # export --all

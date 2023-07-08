@@ -31,6 +31,9 @@ $ curl --get --data-urlencode "search=title:~^foo.*bar$" \
 # add ebook file to library
 $ curl -X POST -H "Content-Type:multipart/form-data" \
     --form "file=@foo.epub" http://localhost:5000/books
+
+# download ebook from library
+$ curl http://localhost:5000/export/1 -o bar.epub
 ```
 
 See [API.md](API.md) for

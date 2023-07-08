@@ -593,6 +593,30 @@ def test_update_book_valid_data(url, seed_book):
     assert book["tags"] == ["foo", "bar"]
 
 
+def test_export_book_invalid_id(url):
+    check_error(
+        "GET",
+        f"{url}/export/0",
+        HTTPStatus.BAD_REQUEST,
+        "cannot be <= 0",
+    )
+
+
+def test_export_book_not_exists(url):
+    check_error(
+        "GET",
+        f"{url}/export/10",
+        HTTPStatus.NOT_FOUND,
+        "No book with id",
+    )
+
+
+def test_export_book(url, seed_book):
+    resp = requests.get(f"{url}/export/{seed_book}", stream=True)
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.text == "hello world!\n"
+
+
 def get(url: str, id: int | str, code: IntEnum, mappings: dict = None):
     resp = requests.get(f"{url}/books/{id}")
     assert resp.status_code == code

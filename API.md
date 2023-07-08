@@ -9,6 +9,7 @@ All endpoints are wrappers for `calibredb`
 * [POST Empty Book](#post-empty-book)
 * [PUT Book](#put-book)
 * [DELETE Book](#delete-book)
+* [Export Book](#export-book)
 
 <h3 id="get-book">GET <code>/books/{id}</code></h3>
 
@@ -788,3 +789,71 @@ resp = requests.delete("localhost:5000/books/1")
 
 [Return to top](#)
 </details>
+
+<h3 id="export-book">GET <code>/export/{id}</code></h3>
+
+<details>
+
+<summary>
+    Export book with id
+</summary>
+
+#### Request
+
+* Methods: `GET`
+* Parameters: `id > 0`
+
+#### Responses
+
+##### Success
+
+* Code: `200 OK`
+
+##### Error
+
+* Condition: id is invalid
+* Code: `400 Bad Request`
+* Content:
+
+```json
+{
+    "error": "400 Bad Request: id cannot be <= 0"
+}
+```
+
+* Condition: Book does not exist
+* Code: `404 Not Found`
+* Content:
+
+```json
+{
+    "error": "404 Not Found: No book with id 1 present"
+}
+```
+
+<details>
+<summary>
+    Examples
+</summary>
+<br>
+
+Curl
+
+```console
+$ curl http://localhost:5000/export/1 -o foo.epub
+```
+
+Python
+
+```python
+import requests
+
+resp = requests.get("localhost:5000/export/1", stream=True)
+with open("foo.epub", "wb") as f:
+    for chunk in resp:
+        f.write(chunk)
+```
+</details>
+<br>
+
+[Return to top](#)

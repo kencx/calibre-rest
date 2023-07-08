@@ -707,13 +707,41 @@ class CalibreWrapper:
                 cmd += f" --field {value}"
         return cmd
 
-    def export(self, ids: list[int]) -> str:
-        """Export books from calibre database to filesystem
+    def export(
+        self, ids: list[int], exports_dir: str = "/exports", formats: list[str] = None
+    ) -> None:
+        """Export books from calibre database to filesystem.
 
         Args:
             ids (list[int]): List of book IDs
+            exports_dir (str): Directory to export all files to
+            formats (list[str]): List of formats to export for given id
+
+        Raises:
+            KeyError: when any id does not exist
         """
-        pass
+        for id in ids:
+            validate_id(id)
+
+        cmd = f"{self.cdb_with_lib} export --dont-write-opf --dont-save-cover --single-dir"
+
+        if exports_dir != "":
+            cmd += f" --to-dir={exports_dir}"
+
+        # NOTE: if format does not exist, there is no error
+        if formats is not None:
+            cmd += f" --formats {','.join(formats)}"
+
+        cmd += f' {",".join([str(i) for i in ids])}'
+
+        try:
+            self._run(cmd)
+        except CalibreRuntimeError as e:
+            match = re.search(r"No book with id .* present", e.stderr)
+            if match is not None:
+                raise KeyError(match.group(0)) from e
+            else:
+                raise CalibreRuntimeError from e
 
 
 def join_list(lst: list, sep: str) -> str:
