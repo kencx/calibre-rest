@@ -1,6 +1,7 @@
 import json
 import os
 import os.path as path
+import shutil
 import tempfile
 
 from flask import abort
@@ -168,26 +169,48 @@ def update_book(id):
     return response(200, jsonify(books=book))
 
 
+@app.route("/books", methods=["DELETE"])
 @app.route("/books/<int:id>", methods=["DELETE"])
-def delete_book(id):
+def delete_book(id=None):
     """Remove existing book in calibre library."""
 
-    calibredb.remove([id])
+    ids = request.args.getlist("id") or None
+    if ids is not None:
+        if len(ids) == 1:
+            ids = [int(i) for i in ids[0].split(",")]
+        else:
+            ids = [int(i) for i in ids]
+    elif id is not None:
+        ids = [id]
+    else:
+        abort(400)
 
-    # check if book still exists
-    book = calibredb.get_book(id)
-    if book:
-        abort(500, f"book {id} was not deleted")
+    calibredb.remove(ids)
+
+    for id in ids:
+        # check if book still exists
+        book = calibredb.get_book(id)
+        if book:
+            abort(500, f"book {id} was not deleted")
 
     return response(200, "")
 
 
+@app.route("/export", methods=["GET"])
 @app.route("/export/<int:id>", methods=["GET"])
 def export_book(id=None):
     """Export existing book from calibre library to file."""
+
     ids = request.args.getlist("id") or None
-    if ids is None:
+    if ids is not None:
+        if len(ids) == 1:
+            ids = [int(i) for i in ids[0].split(",")]
+        else:
+            ids = [int(i) for i in ids]
+    elif id is not None:
         ids = [id]
+    else:
+        abort(400)
 
     with tempfile.TemporaryDirectory() as exports_dir:
         try:
@@ -202,8 +225,16 @@ def export_book(id=None):
 
         if len(files) <= 0:
             abort(500)
-        else:
+        elif len(files) == 1:
             return send_from_directory(exports_dir, files[0], as_attachment=True)
+        else:
+            # zip exports_dir/* to /tmp/exports.zip
+            zipfile = path.join(tempfile.gettempdir(), "exports")
+            zipfile = shutil.make_archive(zipfile, "zip", exports_dir)
+
+            return send_from_directory(
+                tempfile.gettempdir(), "exports.zip", as_attachment=True
+            )
 
 
 # export --all

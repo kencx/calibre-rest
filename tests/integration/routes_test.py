@@ -1,7 +1,9 @@
 import json
 import os
+import zipfile
 from enum import IntEnum
 from http import HTTPStatus
+from io import BytesIO
 
 import pytest
 import requests
@@ -42,8 +44,8 @@ def seed_books(url, test_txt):
     files = [("file", (f"foo{str(i)}.txt", f"hello {str(i)}")) for i in range(1, 6)]
     ids = post(f"{url}/books", HTTPStatus.CREATED, files=files)
     yield ids
-    for i in ids:
-        delete(url, i)
+    resp = requests.delete(f"{url}/books", params={"id": ",".join(ids)})
+    assert resp.status_code == HTTPStatus.OK
 
 
 def test_version(url):
@@ -97,6 +99,14 @@ def test_delete(url, seed_book):
         HTTPStatus.NOT_FOUND,
         "does not exist",
     )
+
+
+def test_delete_multiple(url, seed_books):
+    resp = requests.delete(f"{url}/books", params={"id": ",".join(seed_books)})
+    assert resp.status_code == HTTPStatus.OK
+
+    get_resp = requests.get(f"{url}/books")
+    assert get_resp.status_code == HTTPStatus.NO_CONTENT
 
 
 def test_get_books_empty(url):
@@ -615,6 +625,17 @@ def test_export_book(url, seed_book):
     resp = requests.get(f"{url}/export/{seed_book}", stream=True)
     assert resp.status_code == HTTPStatus.OK
     assert resp.text == "hello world!\n"
+
+
+def test_export_books(url, seed_books):
+    resp = requests.get(
+        f"{url}/export", params={"id": ",".join(seed_books)}, stream=True
+    )
+    assert resp.status_code == HTTPStatus.OK
+
+    z = zipfile.ZipFile(BytesIO(resp.content))
+    for i in range(len(z.namelist())):
+        assert f"foo{i+1}" in z.namelist()[i]
 
 
 def get(url: str, id: int | str, code: IntEnum, mappings: dict = None):

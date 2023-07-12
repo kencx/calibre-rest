@@ -9,7 +9,9 @@ All endpoints are wrappers for `calibredb`
 * [POST Empty Book](#post-empty-book)
 * [PUT Book](#put-book)
 * [DELETE Book](#delete-book)
+* [Batch DELETE](#delete-books)
 * [Export Book](#export-book)
+* [Batch Export](#export-books)
 
 <h3 id="get-book">GET <code>/books/{id}</code></h3>
 
@@ -790,6 +792,58 @@ resp = requests.delete("localhost:5000/books/1")
 [Return to top](#)
 </details>
 
+<h3 id="delete-books">DELETE <code>/books</code></h3>
+
+<details>
+
+<summary>
+    Batch delete books
+</summary>
+
+#### Request
+
+* Methods: `DELETE`
+
+##### Query Parameters
+
+* id (mandatory): Comma separated values or separate parameters.
+
+```
+/books?id=1,2
+/books?id=1&id=2
+```
+
+#### Responses
+
+See DELETE `/books/{id}`.
+
+<details>
+<summary>
+    Examples
+</summary>
+<br>
+
+Curl
+
+```console
+$ curl -X DELETE http://localhost:5000/books?id=1,2
+$ curl -X DELETE http://localhost:5000/books?id=1&id=2
+```
+
+Python
+
+```python
+import requests
+
+resp = requests.delete("localhost:5000/books", params={"id": "1,2"})
+```
+</details>
+<br>
+
+[Return to top](#)
+
+</details>
+
 <h3 id="export-book">GET <code>/export/{id}</code></h3>
 
 <details>
@@ -808,6 +862,8 @@ resp = requests.delete("localhost:5000/books/1")
 ##### Success
 
 * Code: `200 OK`
+* Content:
+    * A single file object
 
 ##### Error
 
@@ -852,6 +908,67 @@ resp = requests.get("localhost:5000/export/1", stream=True)
 with open("foo.epub", "wb") as f:
     for chunk in resp:
         f.write(chunk)
+```
+</details>
+<br>
+
+[Return to top](#)
+</details>
+
+<h3 id="export-books">GET <code>/export</code></h3>
+
+<details>
+
+<summary>
+    Batch export books
+</summary>
+
+#### Request
+
+* Methods: `GET`
+
+##### Query Parameters
+
+* id (mandatory): Comma separated values or separate parameters.
+
+```
+/export?id=1,2
+/export?id=1&id=2
+```
+
+#### Responses
+
+##### Success
+
+* Code: `200 OK`
+* Content:
+    * A zip file object `exports.zip` containing all files
+
+##### Error
+
+See GET `/export/{id}`.
+
+<details>
+<summary>
+    Examples
+</summary>
+<br>
+
+Curl
+
+```console
+$ curl http://localhost:5000/export?id=1,2 -o foo.zip
+$ curl http://localhost:5000/export?id=1&id=2 -o foo.zip
+```
+
+Python
+
+```python
+import requests
+import zipfile
+
+resp = requests.get("localhost:5000/export", params={"id": "1,2"}, stream=True)
+z = zipfile.ZipFile(BytesIO(resp.content))
 ```
 </details>
 <br>

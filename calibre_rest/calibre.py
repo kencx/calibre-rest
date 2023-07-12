@@ -559,7 +559,7 @@ class CalibreWrapper:
                 cmd += f" --{flag_name} {quote(str(value))}"
         return cmd
 
-    def remove(self, ids: list[int], permanent: bool = False) -> str:
+    def remove(self, ids: list[int], permanent: bool = False) -> None:
         """Remove book from calibre database.
 
         Fails silently with no output if given IDs do not exist.
@@ -579,8 +579,7 @@ class CalibreWrapper:
         if permanent:
             cmd += " --permanent"
 
-        out, _ = self._run(cmd)
-        return out
+        self._run(cmd)
 
     def add_format(
         self, id: int, replace: bool = False, data_file: bool = False
@@ -732,7 +731,7 @@ class CalibreWrapper:
         if formats is not None:
             cmd += f" --formats {','.join(formats)}"
 
-        cmd += f' {",".join([str(i) for i in ids])}'
+        cmd += f' {" ".join([str(i) for i in ids])}'
 
         try:
             self._run(cmd)
