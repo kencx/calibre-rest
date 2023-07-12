@@ -27,6 +27,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      # matrix cannot be used in the following steps
       - name: Set Docker metadata for app
         id: meta-app
         uses: docker/metadata-action@v4
@@ -47,7 +48,7 @@ jobs:
             type=semver,pattern=v{{version}}-calibre
             type=semver,pattern=v{{major}}.{{minor}}-calibre
 
-      - name: Build and push app
+      - name: Build and push app for app
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -56,7 +57,7 @@ jobs:
           target: app
           tags: ${{ steps.meta-app.outputs.tags }}
 
-      - name: Build and push app
+      - name: Build and push app for calibre
         uses: docker/build-push-action@v4
         with:
           context: .
